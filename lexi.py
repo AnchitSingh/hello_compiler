@@ -16,13 +16,18 @@ t_TIMES   = r'\*'
 t_DIVIDE  = r'/'
 t_LPAREN  = r'\('
 t_RPAREN  = r'\)'
-
+t_ignore  = ' \t'
 
 def t_MULTILINE_COMMENT(t):
     r'\/\*(.*)(\n+.*)*\*\/'
     pass
 
-# A regular expression rule with some action code
+def t_SINGLELINE_COMMENT(t):
+    r'\/\/.*'
+    pass
+
+
+
 def t_NUMBER(t):
     r'\d+'
     t.value = int(t.value)    
@@ -32,7 +37,6 @@ def t_newline(t):
     r'\n'
     t.lexer.lineno += len(t.value)
 
-t_ignore  = ' \t'
 
 def t_error(t):
     print("Illegal character '%s'" % t.value[0])
