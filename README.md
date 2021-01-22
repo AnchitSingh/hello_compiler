@@ -1,0 +1,3 @@
+# hello_compiler
+SOURCE LANGUAGE: C
+IMPLEMENTATION LANGUAGE: Python
