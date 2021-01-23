@@ -47,7 +47,8 @@ tokens = [
     'R_SQBR',
     'INT_CONSTANT',
     'FLOAT_CONSTANT',
-    'ID'
+    'ID',
+    'STRING'
 ]+list(reserved.values())
  
 t_EQUALS          = r'=='
@@ -85,7 +86,7 @@ t_BLOCK_OPENER    = r'\{'
 t_BLOCK_CLOSER    = r'\}'
 t_L_SQBR          = r'\['
 t_R_SQBR          = r'\]'
-
+t_STRING          =r'".*."'
 t_ignore = ' \t'
 
 def t_ID(t):

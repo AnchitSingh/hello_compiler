@@ -10,7 +10,7 @@ int main(){
     int c;
     c=a+b;
     if(2>1){
-        printf("OK");
+        printf("OKd");
     }
     printf("%d",c);
     return 0;
