@@ -76,7 +76,8 @@ tokens = [
     'INT_CONSTANT',
     'FLOAT_CONSTANT',
     'ID',
-    'STRING'
+    'STRING',
+    'HASH'
 ]+list(reserved.values())
 
 t_EQUALS          = r'=='
@@ -115,6 +116,7 @@ t_BLOCK_CLOSER    = r'\}'
 t_L_SQBR          = r'\['
 t_R_SQBR          = r'\]'
 t_STRING          = r'"(?:[^\\\n"]|\\.)*"'
+t_HASH			  = r'\#'
 t_ignore = ' \t'
 
 def t_ID(t):
@@ -132,15 +134,14 @@ def t_INT_CONSTANT(t):
     t.value = int(t.value)
     return t
 
+def t_INLINE_COMMENT(t):
+    r'\/\/.*'
+    pass
 
 def t_BLOCK_COMMENT(t):
     r'\/\*[\s\S]*?\*\/'
-    t.lexer.lineno += t.value.count('\n')
     pass
 
-def t_INLINE_COMMENT(t):
-    r'\/\/.*$'
-    pass
 
 
 def t_newline(t):

@@ -5,6 +5,11 @@ int main(){
     /* ***
     chefe
     r***** */
+    
+    
+    
+    
+    
     int a=-1.2,b=-2;
     int new[10];
     int c;
