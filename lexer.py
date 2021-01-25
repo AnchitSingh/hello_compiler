@@ -2,11 +2,39 @@ import ply.lex as lex
 import sys
 
 reserved = {
-    'if' : 'IF',
-    'then' : 'THEN',
+    'auto' : 'AUTO',
+    'break' : 'BREAK',
+    'case' : 'CASE',
+    'char' : 'CHAR',
+    'const' : 'CONST',
+    'continue' : 'CONTINUE',
+    'default' : 'DEFAULT',
+    'do' : 'DO',
+    'double' : 'DOUBLE',
     'else' : 'ELSE',
+    'enum' : 'ENUM',
+    'extern' : 'EXTERN',
+    'float' : 'FLOAT',
+    'for' : 'FOR',
+    'goto' : 'GOTO',
+    'if' : 'IF',
+    'int' : 'INT',
+    'long' : 'LONG',
+    'register' : 'REGISTER',
+    'return' : 'RETURN',
+    'short' : 'SHORT',
+    'signed' : 'SIGNED',
+    'sizeof' : 'SIZEOF',
+    'static' : 'STATIC',
+    'struct' : 'STRUCT',
+    'switch' : 'SWITCH',
+    'typedef' : 'TYPEDEF',
+    'union' : 'UNION',
+    'unsigned' : 'UNSIGNED',
+    'void' : 'VOID',
+    'volatile' : 'VOLATILE',
     'while' : 'WHILE',
-
+    '_Packed' : '_PACKED',
 }
 
 tokens = [
@@ -48,9 +76,10 @@ tokens = [
     'INT_CONSTANT',
     'FLOAT_CONSTANT',
     'ID',
-    'STRING'
+    'STRING',
+    'HASH'
 ]+list(reserved.values())
- 
+
 t_EQUALS          = r'=='
 t_ASSIGN          = r'='
 t_GRT             = r'>'
@@ -58,9 +87,9 @@ t_LST             = r'<'
 t_GEQ             = r'>='
 t_LEQ             = r'<='
 t_PLUS            = r'\+'
-t_MINUS           = r'\-'
+t_MINUS           = r'-'
 t_MULT            = r'\*'
-t_DIVIDE          = r'/'
+t_DIVIDE          = r'\/'
 t_LOGICAL_AND     = r'&&'
 t_LOGICAL_OR      = r'\|\|'
 t_LOGICAL_NOT     = r'!'
@@ -71,12 +100,12 @@ t_BITWISE_NOT     = r'~'
 t_BITWISE_XOR     = r'\^'
 t_MODULO          = r'%'
 t_INCREMENT       = r'\+\+'
-t_DECREMENT       = r'\-\-'
+t_DECREMENT       = r'--'
 t_DOT             = r'\.'
-t_PLUSEQ          = r'\+= '
+t_PLUSEQ          = r'\+='
 t_MINUSEQ         = r'-='
 t_MULTEQ          = r'\*='
-t_DIVEQ           = r'/='
+t_DIVEQ           = r'\/='
 t_MODEQ           = r'%='
 t_STMT_TERMINATOR = r';'
 t_COMMA           = r','
@@ -86,7 +115,8 @@ t_BLOCK_OPENER    = r'\{'
 t_BLOCK_CLOSER    = r'\}'
 t_L_SQBR          = r'\['
 t_R_SQBR          = r'\]'
-t_STRING          =r'".*."'
+t_STRING          = r'"(?:[^\\\n"]|\\.)*"'
+t_HASH			  = r'\#'
 t_ignore = ' \t'
 
 def t_ID(t):
@@ -104,13 +134,12 @@ def t_INT_CONSTANT(t):
     t.value = int(t.value)
     return t
 
-
 def t_INLINE_COMMENT(t):
-    r'\/\*(.*)(\n+.*)*\*\/'
+    r'\/\/.*'
     pass
 
 def t_BLOCK_COMMENT(t):
-    r'\/\/.*'
+    r'\/\*[\s\S]*?\*\/'
     pass
 
 
