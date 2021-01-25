@@ -5,8 +5,7 @@ reserved = {
     'if' : 'IF',
     'then' : 'THEN',
     'else' : 'ELSE',
-    'while' : 'WHILE',
-
+    'while' : 'WHILE'
 }
 
 tokens = [
@@ -86,7 +85,7 @@ t_BLOCK_OPENER    = r'\{'
 t_BLOCK_CLOSER    = r'\}'
 t_L_SQBR          = r'\['
 t_R_SQBR          = r'\]'
-t_STRING          =r'".*."'
+t_STRING          = r'".*."'
 t_ignore = ' \t'
 
 def t_ID(t):
