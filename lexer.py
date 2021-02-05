@@ -127,28 +127,33 @@ def t_ID(t):
 
 
 def t_FLOAT_CONSTANT(t):
-    r'-?\d*\.\d+'
+    r'\d*\.\d+'
     t.value = float(t.value)
     return t
 
 def t_INT_CONSTANT(t):
-    r'-?(\d+)'
+    r'\d+'
     t.value = int(t.value)
     return t
-
-def t_INLINE_COMMENT(t):
-    r'\/\/.*'
-    pass
-
-def t_BLOCK_COMMENT(t):
-    r'\/\*[\s\S]*?\*\/'
-    pass
-
 
 
 def t_newline(t):
     r'\n'
     t.lexer.lineno += len(t.value)
+
+def t_INLINE_COMMENT(t):
+    r'\/\/.*'
+    pass
+
+
+# def t_BLOCK_COMMENT(t):
+#     r'\/\*[\s\S]*?\*\/'
+#     string =t.value
+#     t.lexer.lineno += int(string.count('\n'))
+#     pass
+
+
+
 
 
 def t_error(t):
@@ -161,7 +166,7 @@ def main():
     lexer = lex.lex()
     lexer.input(c_code)
     for tok in lexer:
-        print(tok)
+        print(str(tok.type)+'  '+str(tok.value)+'  '+str(tok.lineno)+'  '+str(tok.lexpos))
 
 
 if '__main__' == __name__:
