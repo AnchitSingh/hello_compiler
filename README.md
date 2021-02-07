@@ -5,15 +5,19 @@ SOURCE LANGUAGE: C
 IMPLEMENTATION LANGUAGE: Python
 
 
-Command to run lexer:
+Requirements:
+python3, ply module(pip3 install ply)
 
+
+Command to run lexer:
 python3 lexer.py -f test.c
 
-Optional usage:
 
+Optional usage:
 python3 lexer.py -f test.c -o tokens.out
+
 
 Using executable
 
 1. make
-2. bin/lexer -f test/test.c
+2. ./bin/lexer -f test/test1.c
