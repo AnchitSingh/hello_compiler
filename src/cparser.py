@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-import ply.yacc as yacc
 import sys
 import os
+import ply.yacc as yacc
 from clexer import tokens
 from clexer import lexer
 
@@ -10,15 +10,27 @@ from clexer import lexer
 index = 0
 
 
-def add_to_tree(p):
+def flatten(l):
+    for el in l:
+        if type(el) is list and not isinstance(el, (str, bytes)):
+            yield from flatten(el)
+        else:
+            yield el
+
+
+def add_to_tree(p, node_label=None):
     global index
     global f
-    node_label = (sys._getframe(1).f_code.co_name)[2:]
+
+    p = list(flatten(p))
+
+    if(node_label == None):
+        node_label = (sys._getframe(1).f_code.co_name)[2:]
     index = index + 1
     parent_id = index
     # create a non-terminal node for current node
     f.write(
-        "\n\t" + str(index) + " [label = " + node_label + "]")
+        "\n\t" + str(index) + " [label = \"" + node_label + "\"]")
     # add children
     for i in range(1, len(p)):
         if(type(p[i]) is not tuple):
@@ -44,10 +56,10 @@ def p_primary_expression(p):
                           | FLOAT_CONSTANT
                           | STRING
                           | L_PAREN expression R_PAREN'''
-    if(len(p) == 4):
-        p[0] = p[2]
-    else:
+    if(len(p) == 2):
         p[0] = p[1]
+    else:
+        p[0] = add_to_tree([p[0], p[2]])
 
 
 def p_postfix_expression(p):
@@ -61,17 +73,26 @@ def p_postfix_expression(p):
                           | postfix_expression DECREMENT'''
     if(len(p) == 2):
         p[0] = p[1]
-    else:
+    elif(len(p) == 3):
         p[0] = add_to_tree(p)
+    elif(p[2] == '['):
+        p[0] = add_to_tree([p[0], p[1], p[3]], "[]")
+    elif(p[2] == '.' or p[2] == '->'):
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
+    elif(p[3] == ')'):
+        p[0] = add_to_tree([p[0]], p[1] + "()")
+    elif(p[4] == ')'):
+        p[0] = add_to_tree([p[0], p[3]], p[1] + "()")
 
 
 def p_argument_expression_list(p):
     '''argument_expression_list : assignment_expression
                                 | argument_expression_list COMMA assignment_expression'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
 
 
 def p_unary_expression(p):
@@ -83,8 +104,12 @@ def p_unary_expression(p):
                         | SIZEOF L_PAREN type_name R_PAREN'''
     if(len(p) == 2):
         p[0] = p[1]
+    elif(p[2] == '('):
+        p[0] = add_to_tree([p[0], p[3]], "sizeof")
+    elif(p[1] == 'sizeof'):
+        p[0] = add_to_tree([p[0], p[2]], "sizeof")
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[2]], p[1])
 
 
 def p_unary_operator(p):
@@ -94,10 +119,7 @@ def p_unary_operator(p):
                       | MINUS
                       | BITWISE_NOT
                       | LOGICAL_NOT'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_cast_expression(p):
@@ -106,7 +128,7 @@ def p_cast_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[2], p[4]])
 
 
 def p_multiplicative_expression(p):
@@ -117,7 +139,7 @@ def p_multiplicative_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_additive_expression(p):
@@ -127,7 +149,7 @@ def p_additive_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_shift_expression(p):
@@ -137,7 +159,7 @@ def p_shift_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_relational_expression(p):
@@ -149,7 +171,7 @@ def p_relational_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_equality_expression(p):
@@ -159,7 +181,7 @@ def p_equality_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_and_expression(p):
@@ -168,7 +190,7 @@ def p_and_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_exclusive_or_expression(p):
@@ -177,7 +199,7 @@ def p_exclusive_or_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_inclusive_or_expression(p):
@@ -186,7 +208,7 @@ def p_inclusive_or_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_logical_and_expression(p):
@@ -195,7 +217,7 @@ def p_logical_and_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_logical_or_expression(p):
@@ -204,7 +226,7 @@ def p_logical_or_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_conditional_expression(p):
@@ -213,7 +235,10 @@ def p_conditional_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        t1 = add_to_tree([None, p[1]], "condition")
+        t2 = add_to_tree([None, p[3]], "true")
+        t3 = add_to_tree([None, p[5]], "false")
+        p[0] = add_to_tree([p[0], t1, t2, t3], p[2] + p[4])
 
 
 def p_assignment_expression(p):
@@ -222,7 +247,7 @@ def p_assignment_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_assignment_operator(p):
@@ -237,27 +262,22 @@ def p_assignment_operator(p):
                            | BITWISE_ANDEQ
                            | BITWISE_XOREQ
                            | BITWISE_OREQ'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_expression(p):
     '''expression : assignment_expression
                   | expression COMMA assignment_expression'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
 
 
 def p_constant_expression(p):
     '''constant_expression : conditional_expression'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_declaration(p):
@@ -297,7 +317,7 @@ def p_init_declarator(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_storage_class_specifier(p):
@@ -306,10 +326,7 @@ def p_storage_class_specifier(p):
                                | STATIC
                                | AUTO
                                | REGISTER'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_type_specifier(p):
@@ -324,46 +341,42 @@ def p_type_specifier(p):
                       | UNSIGNED
                       | struct_or_union_specifier
                       | enum_specifier'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_struct_or_union_specifier(p):
     '''struct_or_union_specifier : struct_or_union ID BLOCK_OPENER struct_declaration_list BLOCK_CLOSER
                                  | struct_or_union BLOCK_OPENER struct_declaration_list BLOCK_CLOSER
                                  | struct_or_union ID'''
-    if(len(p) == 2):
-        p[0] = p[1]
+    if(len(p) == 6):
+        t = add_to_tree([None, p[4]], "members_list")
+        p[0] = add_to_tree([p[0], p[2], t], p[1])
+    elif(len(p) == 5):
+        t = add_to_tree([None, p[3]], "members_list")
+        p[0] = add_to_tree([p[0], t], p[1])
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[2]], p[1])
 
 
 def p_struct_or_union(p):
     '''struct_or_union : STRUCT
                        | UNION'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_struct_declaration_list(p):
     '''struct_declaration_list : struct_declaration
                                | struct_declaration_list struct_declaration'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[2])
 
 
 def p_struct_declaration(p):
     '''struct_declaration : specifier_qualifier_list struct_declarator_list STMT_TERMINATOR'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree([p[0], p[1], p[2]])
 
 
 def p_specifier_qualifier_list(p):
@@ -381,9 +394,10 @@ def p_struct_declarator_list(p):
     '''struct_declarator_list : struct_declarator
                               | struct_declarator_list COMMA struct_declarator'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
 
 
 def p_struct_declarator(p):
@@ -400,19 +414,25 @@ def p_enum_specifier(p):
     '''enum_specifier : ENUM BLOCK_OPENER enumerator_list BLOCK_CLOSER
                       | ENUM ID BLOCK_OPENER enumerator_list BLOCK_CLOSER
                       | ENUM ID'''
-    if(len(p) == 2):
-        p[0] = p[1]
+    if(len(p) == 5):
+        t = add_to_tree([None, p[3]], "members_list")
+        p[0] = add_to_tree([p[0], t], p[1])
+    elif(len(p) == 6):
+        t = add_to_tree([None, p[4]], "members_list")
+        p[0] = add_to_tree([p[0], p[2], t], p[1])
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[2]], p[1])
 
 
 def p_enumerator_list(p):
     '''enumerator_list : enumerator
                        | enumerator_list COMMA enumerator'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
+
 
 def p_enumerator(p):
     '''enumerator : ID
@@ -420,16 +440,13 @@ def p_enumerator(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_type_qualifier(p):
     '''type_qualifier : CONST
                       | VOLATILE'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_declarator(p):
@@ -573,18 +590,17 @@ def p_statement(p):
                  | selection_statement
                  | iteration_statement
                  | jump_statement'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_labeled_statement(p):
     '''labeled_statement : ID COLON statement
                          | CASE constant_expression COLON statement
                          | DEFAULT COLON statement'''
-    if(len(p) == 2):
-        p[0] = p[1]
+    if(len(p) == 5):
+        p[0] = add_to_tree([p[0], p[4]], p[1] + ' ' + str(p[2]))
+    elif(p[1] == 'default'):
+        p[0] = add_to_tree([p[0], p[3]], p[1])
     else:
         p[0] = add_to_tree(p)
 
@@ -594,47 +610,52 @@ def p_compound_statement(p):
                           | BLOCK_OPENER statement_list BLOCK_CLOSER
                           | BLOCK_OPENER declaration_list BLOCK_CLOSER
                           | BLOCK_OPENER declaration_list statement_list BLOCK_CLOSER'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    if(len(p) == 4):
+        p[0] = add_to_tree([p[0], p[2]])
+    elif(len(p) == 5):
+        p[0] = add_to_tree([p[0], p[2], p[3]])
 
 
 def p_declaration_list(p):
     '''declaration_list : declaration
                         | declaration_list declaration'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[2])
 
 
 def p_statement_list(p):
     '''statement_list : statement
                       | statement_list statement'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[2])
 
 
 def p_expression_statement(p):
     '''expression_statement : STMT_TERMINATOR
                             | expression STMT_TERMINATOR'''
-    if(len(p) == 2):
+    if(len(p) == 3):
         p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
 
 
 def p_selection_statement(p):
     '''selection_statement : IF L_PAREN expression R_PAREN statement
                            | IF L_PAREN expression R_PAREN statement ELSE statement
                            | SWITCH L_PAREN expression R_PAREN statement'''
-    if(len(p) == 2):
-        p[0] = p[1]
+    if(len(p) == 6):
+        t1 = add_to_tree([None, p[3]], "condition")
+        t2 = add_to_tree([None, p[5]], "body")
+        p[0] = add_to_tree([p[0], t1, t2], p[1])
     else:
-        p[0] = add_to_tree(p)
+        t1 = add_to_tree([None, p[3]], "condition")
+        t2 = add_to_tree([None, p[5]], "body")
+        t3 = add_to_tree([None, p[7]], "else-body")
+        p[0] = add_to_tree([p[0], t1, t2, t3], p[1] + p[6])
 
 
 def p_iteration_statement(p):
@@ -642,10 +663,25 @@ def p_iteration_statement(p):
                            | DO statement WHILE L_PAREN expression R_PAREN STMT_TERMINATOR
                            | FOR L_PAREN expression_statement expression_statement R_PAREN statement
                            | FOR L_PAREN expression_statement expression_statement expression R_PAREN statement'''
-    if(len(p) == 2):
-        p[0] = p[1]
+    if(len(p) == 6):
+        t1 = add_to_tree([None, p[3]], "condition")
+        t2 = add_to_tree([None, p[5]], "body")
+        p[0] = add_to_tree([p[0], t1, t2], p[1])
+    elif(len(p) == 8 and p[1] == 'do'):
+        t1 = add_to_tree([None, p[5]], "condition")
+        t2 = add_to_tree([None, p[2]], "body")
+        p[0] = add_to_tree([p[0], t1, t2], p[1] + '-' + p[3])
+    elif(len(p) == 7):
+        t1 = add_to_tree([None, p[3]], "initialisation")
+        t2 = add_to_tree([None, p[4]], "stop condition")
+        t3 = add_to_tree([None, p[6]], "body")
+        p[0] = add_to_tree([p[0], t1, t2, t3], p[1])
     else:
-        p[0] = add_to_tree(p)
+        t1 = add_to_tree([None, p[3]], "initialisation")
+        t2 = add_to_tree([None, p[4]], "stop condition")
+        t2 = add_to_tree([None, p[5]], "update")
+        t4 = add_to_tree([None, p[7]], "body")
+        p[0] = add_to_tree([p[0], t1, t2, t3, t4], p[1])
 
 
 def p_jump_statement(p):
@@ -654,10 +690,10 @@ def p_jump_statement(p):
                       | BREAK STMT_TERMINATOR
                       | RETURN STMT_TERMINATOR
                       | RETURN expression STMT_TERMINATOR'''
-    if(len(p) == 2):
-        p[0] = p[1]
+    if(len(p) == 3):
+        p[0] = add_to_tree([p[0]], p[1])
     else:
-        p[0] = add_to_tree(p)
+        p[0] = add_to_tree([p[0], p[2]], p[1])
 
 
 def p_translation_unit(p):
@@ -672,10 +708,7 @@ def p_translation_unit(p):
 def p_external_declaration(p):
     '''external_declaration : function_definition
                             | declaration'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_function_definition(p):
