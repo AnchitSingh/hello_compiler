@@ -47,7 +47,12 @@ def add_to_tree(p, node_label=None):
     return (node_label, parent_id)
 
 
-start = 'translation_unit'
+start = 'program'
+
+
+def p_program(p):
+    '''program : translation_unit'''
+    p[0] = add_to_tree(p)
 
 
 def p_primary_expression(p):
@@ -283,10 +288,8 @@ def p_constant_expression(p):
 def p_declaration(p):
     '''declaration : declaration_specifiers STMT_TERMINATOR
                    | declaration_specifiers init_declarator_list STMT_TERMINATOR'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    if(len(p) == 4):
+        p[0] = p[2]
 
 
 def p_declaration_specifiers(p):
@@ -297,18 +300,20 @@ def p_declaration_specifiers(p):
                               | type_qualifier
                               | type_qualifier declaration_specifiers'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[2]
+        p[0].insert(0, p[1])
 
 
 def p_init_declarator_list(p):
     '''init_declarator_list : init_declarator
                             | init_declarator_list COMMA init_declarator'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
 
 
 def p_init_declarator(p):
@@ -384,10 +389,7 @@ def p_specifier_qualifier_list(p):
                                 | type_specifier
                                 | type_qualifier specifier_qualifier_list
                                 | type_qualifier'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_struct_declarator_list(p):
@@ -404,10 +406,7 @@ def p_struct_declarator(p):
     '''struct_declarator : declarator
                          | COLON constant_expression
                          | declarator COLON constant_expression'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_enum_specifier(p):
@@ -452,10 +451,7 @@ def p_type_qualifier(p):
 def p_declarator(p):
     '''declarator : pointer direct_declarator
                   | direct_declarator'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_direct_decalarator(p):
@@ -477,75 +473,63 @@ def p_pointer(p):
                | MULT type_qualifier_list
                | MULT pointer
                | MULT type_qualifier_list pointer'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_type_qualifier_list(p):
     '''type_qualifier_list : type_qualifier
                            | type_qualifier_list type_qualifier'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
 
 
 def p_parameter_type_list(p):
     '''parameter_type_list : parameter_list
                            | parameter_list COMMA ELLIPSIS'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_parameter_list(p):
     '''parameter_list : parameter_declaration
                       | parameter_list COMMA parameter_declaration'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
 
 
 def p_parameter_declaration(p):
     '''parameter_declaration : declaration_specifiers declarator
                              | declaration_specifiers abstract_declarator
                              | declaration_specifiers'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_identifier_list(p):
     '''identifier_list : ID
                        | identifier_list COMMA ID'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
 
 
 def p_type_name(p):
     '''type_name : specifier_qualifier_list
                  | specifier_qualifier_list abstract_declarator'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_abstract_declarator(p):
     '''abstract_declarator : pointer
                            | direct_abstract_declarator
                            | pointer direct_abstract_declarator'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_direct_abstract_declarator(p):
@@ -558,10 +542,7 @@ def p_direct_abstract_declarator(p):
                                   | L_PAREN parameter_type_list R_PAREN
                                   | direct_abstract_declarator L_PAREN R_PAREN
                                   | direct_abstract_declarator L_PAREN parameter_type_list R_PAREN'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+    p[0] = add_to_tree(p)
 
 
 def p_initializer(p):
@@ -571,16 +552,17 @@ def p_initializer(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = '{' + str(p[2])[1:-1] + '}'
 
 
 def p_initializer_list(p):
     '''initializer_list : initializer
                         | initializer_list COMMA initializer'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[3])
 
 
 def p_statement(p):
@@ -611,9 +593,9 @@ def p_compound_statement(p):
                           | BLOCK_OPENER declaration_list BLOCK_CLOSER
                           | BLOCK_OPENER declaration_list statement_list BLOCK_CLOSER'''
     if(len(p) == 4):
-        p[0] = add_to_tree([p[0], p[2]])
+        p[0] = [p[2]]
     elif(len(p) == 5):
-        p[0] = add_to_tree([p[0], p[2], p[3]])
+        p[0] = [p[2], p[3]]
 
 
 def p_declaration_list(p):
@@ -679,7 +661,7 @@ def p_iteration_statement(p):
     else:
         t1 = add_to_tree([None, p[3]], "initialisation")
         t2 = add_to_tree([None, p[4]], "stop condition")
-        t2 = add_to_tree([None, p[5]], "update")
+        t3 = add_to_tree([None, p[5]], "update")
         t4 = add_to_tree([None, p[7]], "body")
         p[0] = add_to_tree([p[0], t1, t2, t3, t4], p[1])
 
@@ -700,9 +682,10 @@ def p_translation_unit(p):
     '''translation_unit : external_declaration
                         | translation_unit external_declaration'''
     if(len(p) == 2):
-        p[0] = p[1]
+        p[0] = [p[1]]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
+        p[0].append(p[2])
 
 
 def p_external_declaration(p):
@@ -713,13 +696,10 @@ def p_external_declaration(p):
 
 def p_function_definition(p):
     '''function_definition : declaration_specifiers declarator declaration_list compound_statement
-                           | declaration_specifiers declarator compound_statement
-                           | declarator declaration_list compound_statement
-                           | declarator compound_statement'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree(p)
+                           | declaration_specifiers declarator compound_statement'''
+    t1 = add_to_tree([None] + p[-1:], "body")
+    t2 = add_to_tree([None, p[1]], "return type")
+    p[0] = add_to_tree([p[0], t2] + p[2:-1] + [t1])
 
 
 # Error rule for syntax errors
@@ -744,13 +724,13 @@ def main():
     parser.error = 0
 
     global f
-    if(len(sys.argv) == 5 and sys.argv[3] == "-o"):
+    if(sys.argv[3] == "-o"):
         f = open(sys.argv[4], "w+")
     else:
         f = open("graph.dot", "w+")
     f.write("digraph ast {")
 
-    if(sys.argv[1] == "-f" and len(sys.argv) == 3):
+    if(sys.argv[1] == "-f"):
         c_code = open(sys.argv[2], 'r').read()
         p = parser.parse(c_code, lexer=lexer)
     else:
