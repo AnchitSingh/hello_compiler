@@ -217,7 +217,7 @@ lexer = lex.lex(debug = 0)
 def main():
     if(len(sys.argv) == 1 or sys.argv[1] == "-h"):
         print("""Command Usage:
-            ./clexer -f code.c -o tokens
+            ./lexer -f code.c -o tokens
     where code.c is the input c file and tokens is the output file with all tokens scanned.""")
         exit()
 

@@ -1,10 +1,10 @@
 all:
 		rm -rf bin
 		mkdir bin
-		cp src/clexer.py bin/clexer
-		cp src/cparser.py bin/cparser
-		chmod u+x bin/clexer
-		chmod u+x bin/cparser
+		cp src/lexer.py bin/lexer
+		cp src/parser.py bin/parser
+		chmod u+x bin/lexer
+		chmod u+x bin/parser
 
 clean:
 		rm -rf bin

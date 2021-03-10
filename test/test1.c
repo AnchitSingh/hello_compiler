@@ -5,8 +5,6 @@ struct node {
   struct node* next;
 };
 
-struct node* createNode(int v){}
-
 struct Graph {
   int numVertices;
   int* visited;
@@ -52,7 +50,7 @@ struct Graph* createGraph(int vertices) {
 
   graph->visited = malloc(vertices * sizeof(int));
 
-  for (i = 0; i < vertices; i++) {
+  for (i = 0; i < vertices; ++i) {
     graph->adjLists[i] = NULL;
     graph->visited[i] = 0;
   }

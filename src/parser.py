@@ -11,7 +11,7 @@ else:
     sys.path.append(parentDir)
 
 import ply.yacc as yacc
-from src.clexer import tokens, lexer
+from src.lexer import tokens, lexer
 
 
 index = 0
@@ -40,26 +40,27 @@ def add_to_tree(p, node_label=None):
         "\n\t" + str(index) + " [label = \"" + node_label + "\"]")
     # add children
     for i in range(1, len(p)):
-        if(type(p[i]) is not tuple):
-            index = index + 1
-            # create a terminal node if child is not node already
-            f.write("\n\t" + str(index) +
-                    " [label = \"" + str(p[i]).replace('"', "") + "\"]")
-            p[i] = (p[i], index)
+        if(p[i] is not None):
+            if(type(p[i]) is not tuple):
+                index = index + 1
+                # create a terminal node if child is not node already
+                f.write("\n\t" + str(index) +
+                        " [label = \"" + str(p[i]).replace('"', "") + "\"]")
+                p[i] = (p[i], index)
 
-        # add edge from current node to child node
-        f.write(
-            "\n\t" + str(parent_id) + " -> " + str(p[i][1]))
+            # add edge from current node to child node
+            f.write(
+                "\n\t" + str(parent_id) + " -> " + str(p[i][1]))
 
     if len(p)>2:
         f.write(
             "\n{\nrank = same;\n")
-        f.write(str(p[1][1]))
-        for i in range(2, len(p)):
+        for i in range(1, len(p) - 1):
             if p[i] is not None:
                 f.write(
-                    " -> " + str(p[i][1]))
-        
+                    str(p[i][1]) + " -> ")
+        if(p[-1:][0] is not None):
+            f.write(str(p[-1:][0][1]))
         f.write(
             " [style = invis];\nrankdir = LR;\n}")
 
@@ -83,7 +84,7 @@ def p_primary_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        p[0] = add_to_tree([p[0], p[2]])
+        p[0] = p[2]
 
 
 def p_postfix_expression(p):
@@ -98,7 +99,7 @@ def p_postfix_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     elif(len(p) == 3):
-        p[0] = add_to_tree(p)
+        p[0] = [p[1], p[2]]
     elif(p[2] == '['):
         p[0] = add_to_tree([p[0], p[1], p[3]], "[]")
     elif(p[2] == '.' or p[2] == '->'):
@@ -259,10 +260,7 @@ def p_conditional_expression(p):
     if(len(p) == 2):
         p[0] = p[1]
     else:
-        t1 = add_to_tree([None, p[1]], "condition")
-        t2 = add_to_tree([None, p[3]], "true")
-        t3 = add_to_tree([None, p[5]], "false")
-        p[0] = add_to_tree([p[0], t1, t2, t3], p[2] + p[4])
+        p[0] = add_to_tree([p[0], p[1], p[3], p[5]], p[2] + p[4])
 
 
 def p_assignment_expression(p):
@@ -377,13 +375,15 @@ def p_struct_or_union_specifier(p):
     '''struct_or_union_specifier : struct_or_union ID BLOCK_OPENER struct_declaration_list BLOCK_CLOSER
                                  | struct_or_union BLOCK_OPENER struct_declaration_list BLOCK_CLOSER
                                  | struct_or_union ID'''
-    if(len(p) == 6):
-        t = add_to_tree([None, p[4]], "members_list")
-        p[0] = add_to_tree([p[0], p[2], t], p[1])
-    elif(len(p) == 5):
-        t = add_to_tree([None, p[3]], "members_list")
-        p[0] = add_to_tree([p[0], t], p[1])
-    else:
+    # if(len(p) == 6):
+    #     t = add_to_tree([None, p[4]], "members_list")
+    #     p[0] = add_to_tree([p[0], p[2], t], p[1])
+    # elif(len(p) == 5):
+    #     t = add_to_tree([None, p[3]], "members_list")
+    #     p[0] = add_to_tree([p[0], t], p[1])
+    # else:
+    #     p[0] = [p[1], p[2]]
+    if(len(p) == 3):
         p[0] = [p[1], p[2]]
 
 
@@ -396,16 +396,16 @@ def p_struct_or_union(p):
 def p_struct_declaration_list(p):
     '''struct_declaration_list : struct_declaration
                                | struct_declaration_list struct_declaration'''
-    if(len(p) == 2):
-        p[0] = [p[1]]
-    else:
-        p[0] = p[1]
-        p[0].append(p[2])
+    # if(len(p) == 2):
+    #     p[0] = [p[1]]
+    # else:
+    #     p[0] = p[1]
+    #     p[0].append(p[2])
 
 
 def p_struct_declaration(p):
     '''struct_declaration : specifier_qualifier_list struct_declarator_list STMT_TERMINATOR'''
-    p[0] = [p[1], p[2]]
+    # p[0] = [p[1], p[2]]
 
 
 def p_specifier_qualifier_list(p):
@@ -423,51 +423,51 @@ def p_specifier_qualifier_list(p):
 def p_struct_declarator_list(p):
     '''struct_declarator_list : struct_declarator
                               | struct_declarator_list COMMA struct_declarator'''
-    if(len(p) == 2):
-        p[0] = [p[1]]
-    else:
-        p[0] = p[1]
-        p[0].append(p[3])
+    # if(len(p) == 2):
+    #     p[0] = [p[1]]
+    # else:
+    #     p[0] = p[1]
+    #     p[0].append(p[3])
 
 
 def p_struct_declarator(p):
     '''struct_declarator : declarator
                          | COLON constant_expression
                          | declarator COLON constant_expression'''
-    p[0] = p[1:]
+    # p[0] = p[1:]
 
 
 def p_enum_specifier(p):
     '''enum_specifier : ENUM BLOCK_OPENER enumerator_list BLOCK_CLOSER
                       | ENUM ID BLOCK_OPENER enumerator_list BLOCK_CLOSER
                       | ENUM ID'''
-    if(len(p) == 5):
-        t = add_to_tree([None, p[3]], "members_list")
-        p[0] = add_to_tree([p[0], t], p[1])
-    elif(len(p) == 6):
-        t = add_to_tree([None, p[4]], "members_list")
-        p[0] = add_to_tree([p[0], p[2], t], p[1])
-    else:
-        p[0] = add_to_tree([p[0], p[2]], p[1])
+    # if(len(p) == 5):
+    #     t = add_to_tree([None, p[3]], "members_list")
+    #     p[0] = add_to_tree([p[0], t], p[1])
+    # elif(len(p) == 6):
+    #     t = add_to_tree([None, p[4]], "members_list")
+    #     p[0] = add_to_tree([p[0], p[2], t], p[1])
+    # else:
+    p[0] = add_to_tree([p[0], p[2]], p[1])
 
 
 def p_enumerator_list(p):
     '''enumerator_list : enumerator
                        | enumerator_list COMMA enumerator'''
-    if(len(p) == 2):
-        p[0] = [p[1]]
-    else:
-        p[0] = p[1]
-        p[0].append(p[3])
+    # if(len(p) == 2):
+    #     p[0] = [p[1]]
+    # else:
+    #     p[0] = p[1]
+    #     p[0].append(p[3])
 
 
 def p_enumerator(p):
     '''enumerator : ID
                   | ID ASSIGN constant_expression'''
-    if(len(p) == 2):
-        p[0] = p[1]
-    else:
-        p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
+    # if(len(p) == 2):
+    #     p[0] = p[1]
+    # else:
+    #     p[0] = add_to_tree([p[0], p[1], p[3]], p[2])
 
 
 def p_type_qualifier(p):
@@ -496,11 +496,12 @@ def p_direct_decalarator(p):
     if(len(p) == 2):
         p[0] = p[1]
     elif(p[2] == '('):
-        if(p[3] == ')'):
-            p[0] = [[p[0]], p[1] + "()"]
-        else:
-            t = add_to_tree([None, p[3]], "parameters")
-            p[0] = [[p[0], t], p[1] + "()"]
+        # if(p[3] == ')'):
+        #     p[0] = [[p[0]], p[1] + "()"]
+        # else:
+        #     t = add_to_tree([None, p[3]], "parameters")
+        #     p[0] = [[p[0], t], p[1] + "()"]
+        p[0] = [[p[0]], p[1] + "()"]
     else:
         p[0] = p[1]
 
@@ -744,8 +745,9 @@ def p_external_declaration(p):
 def p_function_definition(p):
     '''function_definition : declaration_specifiers declarator declaration_list compound_statement
                            | declaration_specifiers declarator compound_statement'''
-    t1 = add_to_tree([None] + p[-1:], "body")
-    t2 = add_to_tree([None, p[1]], "return type")
+    # t1 = add_to_tree([None] + p[-1:], "body")
+    t1 = p[-1:][0]
+    # t2 = add_to_tree([None, p[1]], "return type")
     p[2] = list(flatten(p[2]))
     f_name = str(p[2][-1:][0])
     for x in p[2]:
@@ -755,11 +757,11 @@ def p_function_definition(p):
             break
     if(len(p) == 4):
         if(p[2][-2:-1][0] is None):
-            p[0] = add_to_tree([p[0], t2, t1], f_name)
+            p[0] = add_to_tree([p[0], t1], f_name)
         else:
-            p[0] = add_to_tree([p[0], p[2][-2:-1], t2, t1], f_name)
+            p[0] = add_to_tree([p[0], p[2][-2:-1], t1], f_name)
     else:
-        p[0] = add_to_tree([p[0], p[2][-2:-1], p[3], t2, t1], f_name)
+        p[0] = add_to_tree([p[0], p[2][-2:-1], p[3], t1], f_name)
 
 
 # Error rule for syntax errors
@@ -776,7 +778,7 @@ def p_empty(p):
 def main():
     if(len(sys.argv) == 1 or sys.argv[1] == "-h"):
         print("""Command Usage:
-            ./cparser.py -f code.c -o myAST.dot
+            ./parser -f code.c -o myAST.dot
         where code.c is the input c file and myAST.dot is the output file with AST tree specifications.""")
         exit()
 
