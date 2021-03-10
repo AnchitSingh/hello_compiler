@@ -1,2 +1,4 @@
 bin
 lexer-output
+parser-output
+AST

@@ -158,15 +158,18 @@ t_STRING          = r'[a-zA-Z_]?\"(\\.|[^\\"])*\"'
 
 t_ignore = ' \t'
 
+
 def t_ID(t):
     r'[a-zA-Z_][a-zA-Z_0-9]*'
-    t.type = reserved.get(t.value,'ID')    # Check for reserved words
+    t.type = reserved.get(t.value, 'ID')    # Check for reserved words
     return t
+
 
 def t_FLOAT_CONSTANT(t):
     r'((\d*\.\d+)|(\d+\.\d*))([Ee][+-]?\d+)?|(\d+[Ee][+-]?\d+)'
     t.value = float(t.value)
     return t
+
 
 def t_INT_CONSTANT(t):
     r'(0[xX][a-fA-F0-9]+)|0(\d+)|(\d+)|\'(\\.|[^\\\'])\''
@@ -181,31 +184,40 @@ def t_INT_CONSTANT(t):
         t.value = int(t.value)
     return t
 
+
 def t_newline(t):
     r'\n+'
     t.lexer.lineno += len(t.value)
+
 
 def find_column(input, token):
     line_start = input.rfind('\n', 0, token.lexpos) + 1
     return (token.lexpos - line_start) + 1
 
+
 def t_INLINE_COMMENT(t):
     r'\/\/.*'
     pass
+
 
 def t_BLOCK_COMMENT(t):
     r'\/\*[\s\S]*?\*\/'
     t.lexer.lineno += re.findall(r'.*', t.value).count('') - 1
     pass
 
+
 def t_error(t):
     print("Illegal character '%s'" % t.value[0])
     t.lexer.skip(1)
 
+
+lexer = lex.lex(debug = 0)
+
+
 def main():
     if(len(sys.argv) == 1 or sys.argv[1] == "-h"):
         print("""Command Usage:
-            python3 lexer.py -f code.c -o tokens
+            ./clexer -f code.c -o tokens
     where code.c is the input c file and tokens is the output file with all tokens scanned.""")
         exit()
 
@@ -216,15 +228,15 @@ def main():
         print("Error: pass the c code file as input using -f.")
         exit(-1)
     else:
-        c_code=open(sys.argv[2],"r").read()
+        c_code = open(sys.argv[2], "r").read()
 
-    lexer = lex.lex()
     lexer.input(c_code)
     template = "{:<20}{:<15}{:<10}{:<10}"
     tokens = []
     tokens.append(template.format("Token", "Lexeme", "Line#", "Column#"))
     for tok in lexer:
-        tokens.append(template.format(tok.type, tok.value, tok.lineno, find_column(c_code, tok)))
+        tokens.append(template.format(tok.type, tok.value,
+                                      tok.lineno, find_column(c_code, tok)))
 
     if(len(sys.argv) == 3 or sys.argv[3] != "-o"):
         for tok in tokens:
@@ -237,6 +249,7 @@ def main():
         for tok in tokens:
             f.write(tok + "\n")
         f.close()
+
 
 if '__main__' == __name__:
     main()

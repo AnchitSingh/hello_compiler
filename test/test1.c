@@ -1,14 +1,11 @@
 // DFS algorithm in C
 
-#include <stdio.h>
-#include <stdlib.h>
-
 struct node {
   int vertex;
   struct node* next;
 };
 
-struct node* createNode(int v);
+struct node* createNode(int v){}
 
 struct Graph {
   int numVertices;
@@ -47,6 +44,7 @@ struct node* createNode(int v) {
 
 // Create graph
 struct Graph* createGraph(int vertices) {
+  int i;
   struct Graph* graph = malloc(sizeof(struct Graph));
   graph->numVertices = vertices;
 
@@ -54,7 +52,6 @@ struct Graph* createGraph(int vertices) {
 
   graph->visited = malloc(vertices * sizeof(int));
 
-  int i;
   for (i = 0; i < vertices; i++) {
     graph->adjLists[i] = NULL;
     graph->visited[i] = 0;

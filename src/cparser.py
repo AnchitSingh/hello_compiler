@@ -51,6 +51,18 @@ def add_to_tree(p, node_label=None):
         f.write(
             "\n\t" + str(parent_id) + " -> " + str(p[i][1]))
 
+    if len(p)>2:
+        f.write(
+            "\n{\nrank = same;\n")
+        f.write(str(p[1][1]))
+        for i in range(2, len(p)):
+            if p[i] is not None:
+                f.write(
+                    " -> " + str(p[i][1]))
+        
+        f.write(
+            " [style = invis];\nrankdir = LR;\n}")
+
     return (node_label, parent_id)
 
 
@@ -301,8 +313,7 @@ def p_declaration(p):
             if(t[0] == '='):
                 p[0].append(t)
     else:
-        print(p[1])
-        pass
+        p[0] = p[1]
 
 
 def p_declaration_specifiers(p):
@@ -373,7 +384,7 @@ def p_struct_or_union_specifier(p):
         t = add_to_tree([None, p[3]], "members_list")
         p[0] = add_to_tree([p[0], t], p[1])
     else:
-        pass
+        p[0] = [p[1], p[2]]
 
 
 def p_struct_or_union(p):
@@ -394,7 +405,7 @@ def p_struct_declaration_list(p):
 
 def p_struct_declaration(p):
     '''struct_declaration : specifier_qualifier_list struct_declarator_list STMT_TERMINATOR'''
-    p[0] = add_to_tree([p[0], p[1], p[2]])
+    p[0] = [p[1], p[2]]
 
 
 def p_specifier_qualifier_list(p):
@@ -423,7 +434,7 @@ def p_struct_declarator(p):
     '''struct_declarator : declarator
                          | COLON constant_expression
                          | declarator COLON constant_expression'''
-    p[0] = add_to_tree(p)
+    p[0] = p[1:]
 
 
 def p_enum_specifier(p):
@@ -765,7 +776,7 @@ def p_empty(p):
 def main():
     if(len(sys.argv) == 1 or sys.argv[1] == "-h"):
         print("""Command Usage:
-            python3 cparser.py -f code.c -o myAST.dot
+            ./cparser.py -f code.c -o myAST.dot
         where code.c is the input c file and myAST.dot is the output file with AST tree specifications.""")
         exit()
 
