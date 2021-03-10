@@ -2,9 +2,16 @@
 
 import sys
 import os
+
+myDir = os.path.dirname(os.path.abspath(__file__))
+parentDir = os.path.split(myDir)[0]
+if(sys.path.__contains__(parentDir)):
+    pass
+else:
+    sys.path.append(parentDir)
+
 import ply.yacc as yacc
-from clexer import tokens
-from clexer import lexer
+from src.clexer import tokens, lexer
 
 
 index = 0
@@ -289,7 +296,13 @@ def p_declaration(p):
     '''declaration : declaration_specifiers STMT_TERMINATOR
                    | declaration_specifiers init_declarator_list STMT_TERMINATOR'''
     if(len(p) == 4):
-        p[0] = p[2]
+        p[0] = []
+        for t in p[2]:
+            if(t[0] == '='):
+                p[0].append(t)
+    else:
+        print(p[1])
+        pass
 
 
 def p_declaration_specifiers(p):
@@ -360,7 +373,7 @@ def p_struct_or_union_specifier(p):
         t = add_to_tree([None, p[3]], "members_list")
         p[0] = add_to_tree([p[0], t], p[1])
     else:
-        p[0] = add_to_tree([p[0], p[2]], p[1])
+        pass
 
 
 def p_struct_or_union(p):
@@ -389,7 +402,11 @@ def p_specifier_qualifier_list(p):
                                 | type_specifier
                                 | type_qualifier specifier_qualifier_list
                                 | type_qualifier'''
-    p[0] = add_to_tree(p)
+    if(len(p) == 2):
+        p[0] = [p[1]]
+    else:
+        p[0] = p[2]
+        p[0].insert(0, p[1])
 
 
 def p_struct_declarator_list(p):
@@ -451,7 +468,10 @@ def p_type_qualifier(p):
 def p_declarator(p):
     '''declarator : pointer direct_declarator
                   | direct_declarator'''
-    p[0] = add_to_tree(p)
+    if(len(p) == 2):
+        p[0] = p[1]
+    else:
+        p[0] = [p[1], p[2]]
 
 
 def p_direct_decalarator(p):
@@ -464,8 +484,14 @@ def p_direct_decalarator(p):
                          | direct_declarator L_PAREN R_PAREN'''
     if(len(p) == 2):
         p[0] = p[1]
+    elif(p[2] == '('):
+        if(p[3] == ')'):
+            p[0] = [[p[0]], p[1] + "()"]
+        else:
+            t = add_to_tree([None, p[3]], "parameters")
+            p[0] = [[p[0], t], p[1] + "()"]
     else:
-        p[0] = add_to_tree(p)
+        p[0] = p[1]
 
 
 def p_pointer(p):
@@ -473,7 +499,17 @@ def p_pointer(p):
                | MULT type_qualifier_list
                | MULT pointer
                | MULT type_qualifier_list pointer'''
-    p[0] = add_to_tree(p)
+    if(len(p) == 2):
+        p[0] = [p[1]]
+    elif(len(p) == 3 and (p[2] == 'const' or p[2] == 'volatile')):
+        p[0] = [p[1], p[2]]
+    elif(len(p) == 3):
+        p[0] = p[2]
+        p[0].insert(0, p[1])
+    else:
+        p[0] = p[3]
+        p[0].insert(0, p[2])
+        p[0].insert(0, p[1])
 
 
 def p_type_qualifier_list(p):
@@ -489,7 +525,7 @@ def p_type_qualifier_list(p):
 def p_parameter_type_list(p):
     '''parameter_type_list : parameter_list
                            | parameter_list COMMA ELLIPSIS'''
-    p[0] = add_to_tree(p)
+    p[0] = p[1]
 
 
 def p_parameter_list(p):
@@ -506,7 +542,7 @@ def p_parameter_declaration(p):
     '''parameter_declaration : declaration_specifiers declarator
                              | declaration_specifiers abstract_declarator
                              | declaration_specifiers'''
-    p[0] = add_to_tree(p)
+    p[0] = p[1:]
 
 
 def p_identifier_list(p):
@@ -699,7 +735,20 @@ def p_function_definition(p):
                            | declaration_specifiers declarator compound_statement'''
     t1 = add_to_tree([None] + p[-1:], "body")
     t2 = add_to_tree([None, p[1]], "return type")
-    p[0] = add_to_tree([p[0], t2] + p[2:-1] + [t1])
+    p[2] = list(flatten(p[2]))
+    f_name = str(p[2][-1:][0])
+    for x in p[2]:
+        if(x == '*'):
+            f_name = '*' + f_name
+        else:
+            break
+    if(len(p) == 4):
+        if(p[2][-2:-1][0] is None):
+            p[0] = add_to_tree([p[0], t2, t1], f_name)
+        else:
+            p[0] = add_to_tree([p[0], p[2][-2:-1], t2, t1], f_name)
+    else:
+        p[0] = add_to_tree([p[0], p[2][-2:-1], p[3], t2, t1], f_name)
 
 
 # Error rule for syntax errors
