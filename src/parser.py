@@ -12,7 +12,6 @@ else:
 
 import ply.yacc as yacc
 from src.lexer import tokens, lexer
-from src.symTab import SymbolTable
 
 node_id = 0
 
@@ -78,11 +77,36 @@ def add_to_tree(p, node_label=None):
 
 filename = None
 
+class SymbolTable:
+    def __init__(self, parent=None):
+        self.table = {}
+        self.parent = parent
+
+    def lookUp(self, name):
+        return (name in self.table)
+
+    def insert(self, name, value):
+        if (not self.lookUp(name)):
+            (self.table)[name] = value
+            return True
+        else:
+            return False
+
+    def update(self, name, value):
+        (self.table)[name] = value
+        return True
+
+    def getDetail(self, name):
+        if(self.lookUp(name)):
+            return self.table[name]
+        else:
+            return None
+
 scopeTables = []
 currentScopeId = 0
 
-globalScopeId = SymbolTable()
-scopeTables.append(globalScopeId)
+globalScopeTable = SymbolTable()
+scopeTables.append(globalScopeTable)
 
 offsets = [0]
 offsetPId = [None]
@@ -189,15 +213,10 @@ class NODE:
         self.data = {}
 
 
+# fix this
+
 def type_cast(type1, type2):
-    prec = {"char" : 1, 
-            "short" : 2, "unsigned short" : 2, "signed short" : 2, 
-            "int" : 3, "unsigned int" : 3, "signed int" : 3, 
-            "long int" : 4, "unsigned long int" : 4, "signed long int" : 4, 
-            "long long int" : 5, "unsigned long long int" : 5, "signed long long int" : 5, 
-            "float" : 6, "unsigned float" : 6, "signed float" : 6, 
-            "double" : 7, "unsigned double" : 7, "signed double" : 7, 
-            }
+    prec = {"char" : 1, "int" : 2, "float" : 3}
     if(type1 == type2):
         return type1
     if(prec[type1] > prec[type2]):
@@ -244,7 +263,6 @@ def p_primary_expression(p):
             p[i] = p_
     if(len(p) == 2):
         p[0].parse = p[1].parse
-        p[0].data = setData(p, 1)
         if isinstance(p[1].data, int):
             p[0].data = {"type": "int"}
         elif isinstance(p[1].data, float):
@@ -252,11 +270,17 @@ def p_primary_expression(p):
         elif isinstance(p[1].data, str) and p[1].data[0] == '"':
             p[0].data = {"type": "char*"}
         else:
-            pass
+            res = checkEntry(p[1].data)
+            if(res == False):
+                print("Error at line : " + str(p.lineno(1)) + " :: " + "Identifier is not declared")
+                exit()
+            p[0].data = res
     else:
         p[0].parse = p[2].parse
         p[0].data = setData(p, 2)
 
+
+# distinguish static array from pointer
 
 def p_postfix_expression(p):
     '''postfix_expression : primary_expression
@@ -277,16 +301,16 @@ def p_postfix_expression(p):
         p[0].data = setData(p, 1)
     elif(len(p) == 3):
         p[0].parse = [p[1].parse, p[2].parse]
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[1].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+        allowed_type = ["char", "int", "float"]
+        if p[1].data["type"] not in allowed_type or p[1].data["type"][-1] != '*':
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with increment/decrement operation")
             exit()
         p[0].data["type"] = p[1].data["type"]
     elif(p[2].parse == '['):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], "[]")
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int"]
+        allowed_type = ["char", "int"]
         if p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Array index is not compatible")
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Array index is not integer")
             exit()
         if p[1].data["type"][-1] != '*':
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type is not an array or pointer")
@@ -294,9 +318,15 @@ def p_postfix_expression(p):
         p[0].data["type"] = p[1].data["type"][:-1]
     elif(p[2].parse == '.' or p[2].parse == '->'):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
+        if p[1].data["class"] != "struct":
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Identifier used is not a struct class")
+            exit()
         if(p[2].parse == '.'):
             res = checkEntry(p[1].data["type"], 0)
         else:
+            if(p[1].data["type"][-1] != '*'):
+                print("Error at line : " + str(p.lineno(1)) + " :: " + "Identifier used is not a struct pointer")
+                exit()
             res = checkEntry(p[1].data["type"][:-1], 0)
         res = checkEntry(p[3].parse, res["members_scope"])
         if(res == False):
@@ -324,7 +354,9 @@ def p_postfix_expression(p):
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Insufficient function arguments")
             exit()
         for i in range(len(input_list)):
-            if(not isCompatible(input_list[i], arg_list[i]["type"])):
+            if((arg_list[i]["class"] == "struct" and input_list[i] == arg_list[i]["type"])
+            or ((input_list[i][-1] == '*') ^ (arg_list[i]["type"][-1] == '*'))
+            or (input_list[i][-1] == '*' and arg_list[i]["type"][-1] == '*' and input_list[i] != arg_list[i]["type"])):
                 print("Error at line : " + str(p.lineno(1)) + " :: " + "Type mismatch in function arguments")
                 exit()
         p[0].data["type"] = p[1].data["ret_type"]
@@ -362,33 +394,30 @@ def p_unary_expression(p):
             p[i] = p_
     if(len(p) == 2):
         p[0].parse = p[1].parse
-        if isinstance(p[1].data, str):
-            res = checkEntry(p[1].data)
-            if(res == False):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Identifier is not declared")
-                exit()
-            p[0].data = res
-        else:
-            p[0].data = setData(p, 1)
+        p[0].data = setData(p, 1)
     elif(p[2].parse == '('):
         p[0].parse = add_to_tree([p[0], p[3]], "sizeof")
         p[0].data["type"] = "int"
     elif(p[1].parse == 'sizeof'):
         p[0].parse = add_to_tree([p[0], p[2]], "sizeof")
+        p[0].data["type"] = "int"
     else:
         p[0].parse = add_to_tree([p[0], p[2]], p[1].parse)
         p[0].data = setData(p, 2)
         if(p[1].data == '&'):
             p[0].data["type"] = p[2].data["type"] + '*'
-            return
         elif(p[1].data == '*'):
             p[0].data["type"] = p[2].data["type"][:-1]
-            return
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[2].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with unary operation")
-            exit()
-        p[0].data["type"] = p[2].data["type"]
+        elif(p[1].data == '!'):
+            p[0].data["type"] = "int"
+        elif(p[1].data in ['+', '-', '~']):
+            p[0].data["type"] = p[2].data["type"]
+        else:
+            allowed_type = ["char", "int", "float"]
+            if p[2].data["type"] not in allowed_type or p[2].data["type"][-1] != '*':
+                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with unary operation")
+                exit()
+            p[0].data["type"] = p[2].data["type"]
 
 
 def p_unary_operator(p):
@@ -422,6 +451,9 @@ def p_cast_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[2], p[4]])
+        if(p[2].data["type"][-1] == '*') ^ (p[4].data["type"][-1] == '*'):
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type cast not allowed for pointer and non-pointer")
+            exit()
         p[0].data = setData(p, 4)
         p[0].data["type"] = p[2].data["type"]
 
@@ -444,12 +476,12 @@ def p_multiplicative_expression(p):
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         if(p[2].data == '%'):
-            allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int"]
+            allowed_type = ["char", "int"]
             if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
                 print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with modulo operation")
                 exit()
         else:
-            allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
+            allowed_type = ["char", "int", "float"]
             if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
                 print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with multiply or divide operation")
                 exit()
@@ -472,14 +504,27 @@ def p_additive_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        if p[1].data["type"][-1] == '*' and p[3].data["type"] == "int":
+        if(p[1].data["type"][-1] == '*'):
+            allowed_type = ["char", "int"]
+            if(p[3].data["type"] not in allowed_type):
+                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type incompatible for pointer with minus or plus operation")
+                exit()
             p[0].data["type"] = p[1].data["type"]
-            return
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with plus or minus operation")
-            exit()
-        p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        elif(p[3].data["type"][-1] == '*'):
+            allowed_type = ["char", "int"]
+            if(p[1].data["type"] not in allowed_type):
+                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type incompatible for pointer with minus or plus operation")
+                exit()
+            if(p[2].data == '-'):
+                print("Error at line : " + str(p.lineno(1)) + " :: " + "Integer minus pointer is not compatible expression")
+                exit()
+            p[0].data["type"] = p[3].data["type"]
+        else:
+            allowed_type = ["char", "int", "float"]
+            if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
+                print("Error at line : " + str(p.lineno(2)) + " :: " + "Type not compatible with plus or minus operation")
+                exit()
+            p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
 
 
 def p_shift_expression(p):
@@ -498,11 +543,11 @@ def p_shift_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int"]
+        allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with bitwise shift operation")
             exit()
-        p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        p[0].data["type"] = p[1].data["type"]
 
 
 def p_relational_expression(p):
@@ -523,11 +568,20 @@ def p_relational_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
+        allowed_type = ["char", "int", "float"]
+        if p[1].data["type"][-1] == '*' and p[3].data["type"][-1] == '*':
+            p[0].data["type"] = "int"
+            return
+        elif p[1].data["type"][-1] == '*' and p[3].data["type"] not in ["char", "int"]:
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
             exit()
-        p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        elif p[3].data["type"][-1] == '*' and p[1].data["type"] not in ["char", "int"]:
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            exit()
+        elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            exit()
+        p[0].data["type"] = "int"
 
 
 def p_equality_expression(p):
@@ -546,11 +600,20 @@ def p_equality_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with equality operation")
+        allowed_type = ["char", "int", "float"]
+        if p[1].data["type"][-1] == '*' and p[3].data["type"][-1] == '*':
+            p[0].data["type"] = "int"
+            return
+        elif p[1].data["type"][-1] == '*' and p[3].data["type"] not in ["char", "int"]:
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
             exit()
-        p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        elif p[3].data["type"][-1] == '*' and p[1].data["type"] not in ["char", "int"]:
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            exit()
+        elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
+            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            exit()
+        p[0].data["type"] = "int"
 
 
 def p_and_expression(p):
@@ -568,7 +631,7 @@ def p_and_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int"]
+        allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with bitwise and operation")
             exit()
@@ -590,7 +653,7 @@ def p_exclusive_or_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int"]
+        allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with bitwise xor operation")
             exit()
@@ -612,7 +675,7 @@ def p_inclusive_or_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int"]
+        allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with bitwise or operation")
             exit()
@@ -634,11 +697,14 @@ def p_logical_and_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
+        allowed_type = ["char", "int", "float"]
+        if p[1].data["type"][-1] == '*' or p[3].data["type"][-1] == '*':
+            p[0].data["type"] = "int"
+            return
+        elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with logical and operation")
             exit()
-        p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        p[0].data["type"] = "int"
 
 
 def p_logical_or_expression(p):
@@ -656,11 +722,14 @@ def p_logical_or_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
+        allowed_type = ["char", "int", "float"]
+        if p[1].data["type"][-1] == '*' or p[3].data["type"][-1] == '*':
+            p[0].data["type"] = "int"
+            return
+        elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with logical or operation")
             exit()
-        p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        p[0].data["type"] = "int"
 
 
 def p_conditional_expression(p):
@@ -678,12 +747,13 @@ def p_conditional_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3], p[5]], p[2].parse + p[4].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[1].data["type"] not in allowed_type:
+        if p[1].data["type"] in ["void", "void*"] or p[1].data["class"] in ["struct", "union"] :
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with ternary operation")
             exit()
         p[0].data["type"] = type_cast(p[3].data["type"], p[5].data["type"])
 
+
+# type checking handling
 
 def p_assignment_expression(p):
     '''assignment_expression : conditional_expression
@@ -698,8 +768,7 @@ def p_assignment_expression(p):
         p[0].data = setData(p, 1)
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int", "float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]
-        if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type or (p[1].data["type"][-1] == '*' and p[3].data["type"] in ["float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]) or (p[3].data["type"][-1] == '*' and p[1].data["type"] in ["float", "unsigned float", "signed float", "double", "unsigned double", "signed double"]):
+        if p[1].data["class"] in ["struct", "union"] or p[3].data["class"] in ["struct", "union"] or p[1].data["type"][-1] == '*' and p[3].data["type"] == "float" or p[3].data["type"][-1] == '*' and p[1].data["type"] == "float":
             print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with assignment operation")
             exit()
         p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
@@ -727,6 +796,8 @@ def p_assignment_operator(p):
     p[0].parse = p[1].parse
     p[0].data = setData(p, 1)
 
+
+# come back later
 
 def p_expression(p):
     '''expression : assignment_expression
