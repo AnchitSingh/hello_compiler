@@ -162,9 +162,15 @@ def updateEntry(identifier, data, scope = None):
 def checkEntry(identifier, scope = None):
     global scopeTables
     global currentScopeId
-    
+
     if scope is None:
         scope = currentScopeId
+        while(scope is not None):
+            res = checkEntry(identifier, scope)
+            if(res):
+                return res
+            scope = scopeTables[scope].parent
+        return False
 
     symtab = scopeTables[scope]
     if symtab.lookUp(identifier):
@@ -264,15 +270,15 @@ def p_primary_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         if isinstance(p[1].data, int):
-            p[0].data = {"type": "int"}
+            p[0].data = {"type": "int", "class": "basic"}
         elif isinstance(p[1].data, float):
-            p[0].data = {"type": "float"}
+            p[0].data = {"type": "float", "class": "basic"}
         elif isinstance(p[1].data, str) and p[1].data[0] == '"':
-            p[0].data = {"type": "char*"}
+            p[0].data = {"type": "char*", "class": "basic"}
         else:
             res = checkEntry(p[1].data)
             if(res == False):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Identifier is not declared")
+                print("Error at line : " + str(p.lineno(1)) + " :: " + p[1].data + " | Identifier is not declared")
                 exit()
             p[0].data = res
     else:
@@ -303,61 +309,63 @@ def p_postfix_expression(p):
         p[0].parse = [p[1].parse, p[2].parse]
         allowed_type = ["char", "int", "float"]
         if p[1].data["type"] not in allowed_type or p[1].data["type"][-1] != '*':
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with increment/decrement operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Type not compatible with increment/decrement operation")
             exit()
         p[0].data["type"] = p[1].data["type"]
+        p[0].data["class"] = "basic"
     elif(p[2].parse == '['):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], "[]")
         allowed_type = ["char", "int"]
         if p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Array index is not integer")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Array index is not integer")
             exit()
         if p[1].data["type"][-1] != '*':
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type is not an array or pointer")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Type is not an array or pointer")
             exit()
         p[0].data["type"] = p[1].data["type"][:-1]
+        p[0].data["class"] = "basic"
     elif(p[2].parse == '.' or p[2].parse == '->'):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         if p[1].data["class"] != "struct":
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Identifier used is not a struct class")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Identifier used is not a struct class")
             exit()
         if(p[2].parse == '.'):
             res = checkEntry(p[1].data["type"], 0)
         else:
             if(p[1].data["type"][-1] != '*'):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Identifier used is not a struct pointer")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Identifier used is not a struct pointer")
                 exit()
             res = checkEntry(p[1].data["type"][:-1], 0)
         res = checkEntry(p[3].parse, res["members_scope"])
         if(res == False):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Identifier used is not in struct member list")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[3].parse + " | Identifier used is not in struct member list")
             exit()
         p[0].data = res
     elif(p[3].parse == ')'):
         p[0].parse = add_to_tree([p[0]], p[1].parse + "()")
-        res = checkEntry(p[1].data, 0)
+        res = checkEntry(p[1].data["name"], 0)
         if(res == False):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Function is not declared")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Function is not declared")
             exit()
         p[1].data = res
         p[0].data["type"] = p[1].data["ret_type"]
     elif(p[4].parse == ')'):
         p[0].parse = add_to_tree([p[0], p[3]], p[1].parse + "()")
-        res = checkEntry(p[1].data, 0)
+        res = checkEntry(p[1].data["name"], 0)
         if(res == False):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Function is not declared")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Function is not declared")
             exit()
         p[1].data = res
         input_list = p[1].data["input_type"].split(',')[1:]
         arg_list = p[3].data
         if(len(input_list) != len(arg_list)):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Insufficient function arguments")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Insufficient function arguments")
             exit()
         for i in range(len(input_list)):
             if((arg_list[i]["class"] == "struct" and input_list[i] == arg_list[i]["type"])
             or ((input_list[i][-1] == '*') ^ (arg_list[i]["type"][-1] == '*'))
             or (input_list[i][-1] == '*' and arg_list[i]["type"][-1] == '*' and input_list[i] != arg_list[i]["type"])):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type mismatch in function arguments")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + p[1].data["name"] + " | Type mismatch in function arguments")
                 exit()
         p[0].data["type"] = p[1].data["ret_type"]
 
@@ -398,9 +406,11 @@ def p_unary_expression(p):
     elif(p[2].parse == '('):
         p[0].parse = add_to_tree([p[0], p[3]], "sizeof")
         p[0].data["type"] = "int"
+        p[0].data["class"] = "basic"
     elif(p[1].parse == 'sizeof'):
         p[0].parse = add_to_tree([p[0], p[2]], "sizeof")
         p[0].data["type"] = "int"
+        p[0].data["class"] = "basic"
     else:
         p[0].parse = add_to_tree([p[0], p[2]], p[1].parse)
         p[0].data = setData(p, 2)
@@ -410,12 +420,13 @@ def p_unary_expression(p):
             p[0].data["type"] = p[2].data["type"][:-1]
         elif(p[1].data == '!'):
             p[0].data["type"] = "int"
+            p[0].data["class"] = "basic"
         elif(p[1].data in ['+', '-', '~']):
             p[0].data["type"] = p[2].data["type"]
         else:
             allowed_type = ["char", "int", "float"]
             if p[2].data["type"] not in allowed_type or p[2].data["type"][-1] != '*':
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with unary operation")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + p[2].data["name"] + " | Type not compatible with unary operation")
                 exit()
             p[0].data["type"] = p[2].data["type"]
 
@@ -452,7 +463,7 @@ def p_cast_expression(p):
     else:
         p[0].parse = add_to_tree([p[0], p[2], p[4]])
         if(p[2].data["type"][-1] == '*') ^ (p[4].data["type"][-1] == '*'):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type cast not allowed for pointer and non-pointer")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + p[2].data["type"] + " | Type cast not allowed for pointer and non-pointer")
             exit()
         p[0].data = setData(p, 4)
         p[0].data["type"] = p[2].data["type"]
@@ -478,14 +489,15 @@ def p_multiplicative_expression(p):
         if(p[2].data == '%'):
             allowed_type = ["char", "int"]
             if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with modulo operation")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with modulo operation")
                 exit()
         else:
             allowed_type = ["char", "int", "float"]
             if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with multiply or divide operation")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with multiply or divide operation")
                 exit()
         p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        p[0].data["class"] = "basic"
 
 
 def p_additive_expression(p):
@@ -507,24 +519,25 @@ def p_additive_expression(p):
         if(p[1].data["type"][-1] == '*'):
             allowed_type = ["char", "int"]
             if(p[3].data["type"] not in allowed_type):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type incompatible for pointer with minus or plus operation")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Type incompatible for pointer with minus or plus operation")
                 exit()
             p[0].data["type"] = p[1].data["type"]
         elif(p[3].data["type"][-1] == '*'):
             allowed_type = ["char", "int"]
             if(p[1].data["type"] not in allowed_type):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type incompatible for pointer with minus or plus operation")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Type incompatible for pointer with minus or plus operation")
                 exit()
             if(p[2].data == '-'):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Integer minus pointer is not compatible expression")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Integer minus pointer is not compatible expression")
                 exit()
             p[0].data["type"] = p[3].data["type"]
         else:
             allowed_type = ["char", "int", "float"]
             if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-                print("Error at line : " + str(p.lineno(2)) + " :: " + "Type not compatible with plus or minus operation")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with plus or minus operation")
                 exit()
             p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+            p[0].data["class"] = "basic"
 
 
 def p_shift_expression(p):
@@ -545,7 +558,7 @@ def p_shift_expression(p):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with bitwise shift operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with bitwise shift operation")
             exit()
         p[0].data["type"] = p[1].data["type"]
 
@@ -573,15 +586,16 @@ def p_relational_expression(p):
             p[0].data["type"] = "int"
             return
         elif p[1].data["type"][-1] == '*' and p[3].data["type"] not in ["char", "int"]:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with relational operation")
             exit()
         elif p[3].data["type"][-1] == '*' and p[1].data["type"] not in ["char", "int"]:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with relational operation")
             exit()
         elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with relational operation")
             exit()
         p[0].data["type"] = "int"
+        p[0].data["class"] = "basic"
 
 
 def p_equality_expression(p):
@@ -605,15 +619,16 @@ def p_equality_expression(p):
             p[0].data["type"] = "int"
             return
         elif p[1].data["type"][-1] == '*' and p[3].data["type"] not in ["char", "int"]:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with relational operation")
             exit()
         elif p[3].data["type"][-1] == '*' and p[1].data["type"] not in ["char", "int"]:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with relational operation")
             exit()
         elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with relational operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with relational operation")
             exit()
         p[0].data["type"] = "int"
+        p[0].data["class"] = "basic"
 
 
 def p_and_expression(p):
@@ -633,9 +648,10 @@ def p_and_expression(p):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with bitwise and operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with bitwise and operation")
             exit()
         p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        p[0].data["class"] = "basic"
 
 
 def p_exclusive_or_expression(p):
@@ -655,9 +671,10 @@ def p_exclusive_or_expression(p):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with bitwise xor operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with bitwise xor operation")
             exit()
         p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        p[0].data["class"] = "basic"
 
 
 def p_inclusive_or_expression(p):
@@ -677,9 +694,10 @@ def p_inclusive_or_expression(p):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with bitwise or operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with bitwise or operation")
             exit()
         p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        p[0].data["class"] = "basic"
 
 
 def p_logical_and_expression(p):
@@ -700,11 +718,13 @@ def p_logical_and_expression(p):
         allowed_type = ["char", "int", "float"]
         if p[1].data["type"][-1] == '*' or p[3].data["type"][-1] == '*':
             p[0].data["type"] = "int"
+            p[0].data["class"] = "basic"
             return
         elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with logical and operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with logical and operation")
             exit()
         p[0].data["type"] = "int"
+        p[0].data["class"] = "basic"
 
 
 def p_logical_or_expression(p):
@@ -725,11 +745,13 @@ def p_logical_or_expression(p):
         allowed_type = ["char", "int", "float"]
         if p[1].data["type"][-1] == '*' or p[3].data["type"][-1] == '*':
             p[0].data["type"] = "int"
+            p[0].data["class"] = "basic"
             return
         elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with logical or operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with logical or operation")
             exit()
         p[0].data["type"] = "int"
+        p[0].data["class"] = "basic"
 
 
 def p_conditional_expression(p):
@@ -748,9 +770,10 @@ def p_conditional_expression(p):
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3], p[5]], p[2].parse + p[4].parse)
         if p[1].data["type"] in ["void", "void*"] or p[1].data["class"] in ["struct", "union"] :
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with ternary operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with ternary operation")
             exit()
         p[0].data["type"] = type_cast(p[3].data["type"], p[5].data["type"])
+        p[0].data["class"] = "basic"
 
 
 # type checking handling
@@ -769,9 +792,10 @@ def p_assignment_expression(p):
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         if p[1].data["class"] in ["struct", "union"] or p[3].data["class"] in ["struct", "union"] or p[1].data["type"][-1] == '*' and p[3].data["type"] == "float" or p[3].data["type"][-1] == '*' and p[1].data["type"] == "float":
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with assignment operation")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with assignment operation")
             exit()
         p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])
+        p[0].data["class"] = "basic"
 
 
 def p_assignment_operator(p):
@@ -848,11 +872,11 @@ def p_declaration(p):
         for decl in p[2].data:
             data = setData(p, 1)
             if(data["type"] == "void"):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Can not declare void type variable")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + data["name"] + " | Can not declare void type variable")
                 exit()
             if("init_type" in decl.keys()):
                 if not isCompatible(decl["init_type"], data["type"]) or (data["type"][-1] == '*' and not isCompatible(decl["init_type"], data["type"][:-1])):
-                    print("Error at line : " + str(p.lineno(1)) + " :: " + "Incompatible type initialisation")
+                    print("Error at line : " + str(p.lineno(0)) + " :: " + "Incompatible type initialisation")
                     exit()
             data["name"] = decl["name"]
             # data["meta"] = decl["meta"]
@@ -870,7 +894,7 @@ def p_declaration(p):
             addToOffset(data["size"])
             res = pushEntry(decl["name"], data)
             if(res == False):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Redeclaration of variable")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + decl["name"] + " | Redeclaration of variable")
                 exit()
     else:
         p[0].parse = p[1].parse
@@ -991,7 +1015,7 @@ def p_struct_or_union_specifier(p):
         p[0].data["size"] = getOffset()
         res = pushEntry(p[2].data, p[0].data)
         if(res == False):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Redefinition of struct variable")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Redefinition of struct variable")
             exit()
         popOffset()
     elif(len(p) == 5):
@@ -1002,7 +1026,7 @@ def p_struct_or_union_specifier(p):
         p[0].parse = [p[1].parse, p[2].parse]
         res = checkEntry(p[2].data, 0)
         if(res == False):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Struct identifier is not defined")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Struct identifier is not defined")
             exit()
         p[0].data = res
     # if(len(p) == 3):
@@ -1055,7 +1079,7 @@ def p_struct_declaration(p):
     for decl in p[2].data:
         data = setData(p, 1)
         if(data["type"] == "void"):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Can not declare void type variable")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Can not declare void type variable")
             exit()
         data["name"] = decl["name"]
         # data["meta"] = decl["meta"]
@@ -1064,7 +1088,7 @@ def p_struct_declaration(p):
         addToOffset(data["size"])
         res = pushEntry(decl["name"], data)
         if(res == False):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Redeclaration of variable")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Redeclaration of variable")
             exit()
 
 
@@ -1239,14 +1263,14 @@ def p_direct_decalarator(p):
         if(res == False):
             pushEntry(function_name, {"type": "function", "class": "function", **(p[0].data)}, scope=parent)
         else:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Redeclaration of function name")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Redeclaration of function name")
             exit()
         p[0].parse = [[p[0].parse], p[1].parse + "()"]
     else:
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
         if(p[1].data["type"] == "void"):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Can not declare void type array")
+            print("Error at line : " + str(p.lineno(0)) + " :: " + "Can not declare void type array")
             exit()
         p[0].data["type"] = p[1].data["type"] + '*'
 
@@ -1332,13 +1356,15 @@ def p_parameter_declaration(p):
     decl = setData(p, 2)
     data = setData(p, 1)
     if(data["type"] == "void"):
-        print("Error at line : " + str(p.lineno(1)) + " :: " + "Can not declare void type variable in parameter")
+        print("Error at line : " + str(p.lineno(0)) + " :: " + "Can not declare void type variable in parameter")
         exit()
+    if(decl["type"] == '*'):
+        data["type"] = data["type"] + '*'
     data["name"] = decl["name"]
     data["meta"] = decl["meta"]
     res = pushEntry(decl["name"], data)
     if(res == False):
-        print("Error at line : " + str(p.lineno(1)) + " :: " + "Redeclaration of variable")
+        print("Error at line : " + str(p.lineno(0)) + " :: " + "Redeclaration of variable")
         exit()
     p[0].data = data
 
@@ -1417,7 +1443,7 @@ def p_initializer(p):
         init_type = p[2].data[0]["type"]
         for init in p[2].data:
             if not isCompatible(init["type"], init_type):
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Incompatible type initialisation")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Incompatible type initialisation")
                 exit()
             init_type = type_cast(init_type, init["type"])
         p[0].data["type"] = init_type
@@ -1534,7 +1560,7 @@ def p_statement_list(p):
         p[0].data = {}
         if "ret_type" in p[1].data.keys():
             if "ret_type" in p[2].data.keys() and p[1].data["ret_type"] != p[2].data["ret_type"]:
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Return type mismatch")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Return type mismatch")
                 exit()
             else:
                 p[0].data["ret_type"] = p[1].data["ret_type"]
@@ -1575,7 +1601,7 @@ def p_selection_statement(p):
         if(p[1].data == "switch"):
             allowed_type = ["char", "short", "unsigned short", "signed short", "int", "unsigned int", "signed int", "long int", "unsigned long int", "signed long int", "long long int", "unsigned long long int", "signed long long int"]
             if p[3].data["type"] not in allowed_type:
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with switch condition")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Type not compatible with switch condition")
                 exit()
         p[0].data= setData(p, 5)
     else:
@@ -1586,7 +1612,7 @@ def p_selection_statement(p):
         p[0].data = {}
         if "ret_type" in p[5].data.keys():
             if "ret_type" in p[7].data.keys() and p[5].data["ret_type"] == p[7].data["ret_type"]:
-                print("Error at line : " + str(p.lineno(1)) + " :: " + "Return type mismatch")
+                print("Error at line : " + str(p.lineno(0)) + " :: " + "Return type mismatch")
                 exit()
             else:
                 p[0].data["ret_type"] = p[5].data["ret_type"]
@@ -1703,10 +1729,10 @@ def p_function_definition(p):
         p[0].parse = add_to_tree([p[0], p[2].parse[-2:-1], t1], f_name)
 
     if(p[1].data["type"] != "void" and ((not isinstance(p[3].data, list) and "ret_type" not in p[3].data.keys()) or isinstance(p[3].data, list))):
-        print("Error at line : " + str(p.lineno(1)) + " :: " + "Return type is not void, must include a return statement")
+        print("Error at line : " + str(p.lineno(0)) + " :: " + "Return type is not void, must include a return statement")
         exit()
     if not isCompatible(p[1].data["type"], p[3].data["ret_type"]):
-        print("Error at line : " + str(p.lineno(1)) + " :: " + "Return type mismatch")
+        print("Error at line : " + str(p.lineno(0)) + " :: " + "Return type mismatch")
         exit()
     funcData = checkEntry(p[2].data["name"], 0)
     funcData["ret_type"] = p[1].data["type"]
@@ -1736,7 +1762,7 @@ def p_f_push_scope(p):
     global currentScopeId
     global scopeTables
     if(currentScopeId):
-        print("Error at line : " + str(p.lineno(1)) + " :: " + "Function can only be declared in global scope")
+        print("Error at line : " + str(p.lineno(0)) + " :: " + "Function can only be declared in global scope")
         exit()
     pushScope()
     pushOffset()
