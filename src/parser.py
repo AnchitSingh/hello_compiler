@@ -104,10 +104,12 @@ class SymbolTable:
 
 scopeTables = []
 currentScopeId = 0
+labels = {}
+tmpId = 0
+
 
 globalScopeTable = SymbolTable()
 scopeTables.append(globalScopeTable)
-
 offsets = [0]
 offsetPId = [None]
 currentOffset = 0
@@ -168,13 +170,13 @@ def checkEntry(identifier, scope = None):
         while(scope is not None):
             res = checkEntry(identifier, scope)
             if(res):
-                return res
+                return (res, scope)
             scope = scopeTables[scope].parent
         return False
 
     symtab = scopeTables[scope]
     if symtab.lookUp(identifier):
-        return symtab.getDetail(identifier)
+        return (symtab.getDetail(identifier), scope)
     return False
 
 
@@ -213,14 +215,72 @@ def setData(p, x):
     else:
         return p[x].data.copy()
 
+def getSize(type_):
+    size = {"void" : 0, "char" : 1, "int" : 4, "float" : 4}
+    if(type_[-1] == '*'):
+        return 8
+    else:
+        return size["type"]
+
+#--------------------------FUNCTIONS FOR 3AC-----------------------------------#
+def getNewLabel(s="label"):
+    labels[s] = labels[s]+1 if s in labels.keys() else 0
+    label = s + "#" + str(labels[s])
+    return label
+
+def getNewTmp(type_, offset = None, size = None, base="rbp"):
+    global tmpId
+    tmp = "tmp_" + str(tmpId)
+    tmpId = tmpId + 1
+    
+    if offset == None:
+        addToOffset(getSize[type_])
+        offset = getOffset()
+    
+
+    data = {"type" :  type_ , "class" : "tmp", "size" : size, "offset" : offset , "base" : str(base)}
+    pushVar(tmp, data)
+
+    return tmp
+
+def quad(op, a, statement):
+    arg = [ a[i] if i<len(a) else "" for i in range(3) ]
+    if op=="&":
+        op = "load_address"
+    if op=="eq":
+        if arg[0][0]=="*":
+            op = "store"
+            arg[0] = arg[0][1:].rstrip("(").lstrip(")")
+        elif arg[1][0]=="*":
+            op = "load"
+            arg[1] = arg[1][1:].rstrip("(").lstrip(")")
+        elif arg[1].isdigit():
+            op = "=" 
+        elif arg[1][0]=="'" and arg[1][2]=="'" and len(arg)==3:
+            op = "="
+        elif arg[1].isdecimal():
+            op = "="
+        elif arg[0].split('@')[0]=="tmp":
+            c = checkVar(arg[0], "**")
+            op = "=" # +("p" if "|" in  c["var"]["type"] else c["var"]["type"]) 
+        else:
+            c = checkVar(arg[0].split('@')[0], int(arg[0].split('@')[1]))
+            op = "=" #+ ("p" if "|" in  c["type"] else c["type"]) 
+    
+    return " $ ".join([statement]+[op]+arg)
+
 
 class NODE:
     def __init__(self):
         self.data = {}
+        self.code = []
+        self.place =  None
+
+    def __str__(self):
+        return ( str(self.data) +  str(self.place))
 
 
 # fix this
-
 def type_cast(type1, type2):
     prec = {"char" : 1, "int" : 2, "float" : 3}
     if(type1 == type2):
@@ -270,20 +330,40 @@ def p_primary_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         if isinstance(p[1].data, int):
-            p[0].data = {"type": "int", "class": "basic"}
+            p[0].data = {"type": "int", "class": "basic", "value" : p[1].data, "name" : None}
+            
+            #------------3AC------------#
+            p[0].place = getNewTmp(p[0].data["type"])
+            p[0].code = [ quad("eqconst"+p[0].data["type"],[p[0].place,str(p[0].data["value"]),""],p[0].place + " = " + str(p[0].data["value"])) ] 
         elif isinstance(p[1].data, float):
-            p[0].data = {"type": "float", "class": "basic"}
+            p[0].data = {"type": "float", "class": "basic", "value" : p[1].data, "name" : None}
+            
+            #------------3AC------------#
+            p[0].place = getNewTmp(p[0].data["type"])
+            p[0].code = [ quad("eqconst"+p[0].data["type"],[p[0].place,str(p[0].data["value"]),""],p[0].place + " = " + str(p[0].data["value"])) ] 
         elif isinstance(p[1].data, str) and p[1].data[0] == '"':
-            p[0].data = {"type": "char*", "class": "basic"}
+            p[0].data = {"type": "char*", "class": "basic", "value" : p[1].data, "name" : None}
+            
+            #------------3AC------------#
+            p[0].place = getNewTmp(p[0].data["type"])
+            p[0].code = [ quad("eqconst"+p[0].data["type"],[p[0].place,str(p[0].data["value"]),""],p[0].place + " = " + str(p[0].data["value"])) ] 
         else:
-            res = checkEntry(p[1].data)
+            res, scp = checkEntry(p[1].data)
             if(res == False):
                 print("Error at line : " + str(p.lineno(1)) + " :: " + p[1].data + " | Identifier is not declared")
                 exit()
             p[0].data = res
+            
+            #------------3AC------------#
+            p[0].place = p[1].data + "@" + str(scp)
+            p[0].code = [ "" ]
     else:
         p[0].parse = p[2].parse
         p[0].data = setData(p, 2)
+        
+        #------------3AC------------#
+        p[0].place = p[2].place
+        p[0].code = p[2].code
 
 
 # distinguish static array from pointer
@@ -305,6 +385,11 @@ def p_postfix_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code.copy()
+
     elif(len(p) == 3):
         p[0].parse = [p[1].parse, p[2].parse]
         allowed_type = ["char", "int", "float"]
@@ -313,6 +398,14 @@ def p_postfix_expression(p):
             exit()
         p[0].data["type"] = p[1].data["type"]
         p[0].data["class"] = "basic"
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        tmp = NODE()
+        tmp.place = getNewTmp(p[1].data["type"])
+
+
+
     elif(p[2].parse == '['):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], "[]")
         allowed_type = ["char", "int"]
@@ -381,11 +474,20 @@ def p_argument_expression_list(p):
     if(len(p) == 2):
         p[0].parse = [p[1].parse]
         p[0].data = [setData(p, 1)]
+
+        #------------3AC------------#
+        p[0].place = [ p[1].place ] 
+        p[0].code = p[1].code 
+    
     else:
         p[0].parse = p[1].parse
         p[0].parse.append(p[3].parse)
         p[0].data = p[1].data
         p[0].data.append(setData(p, 3))
+
+        #------------3AC------------#
+        p[0].place =  [ p[3].place ] +  p[1].place
+        p[0].code = p[1].code + p[3].code
 
 
 def p_unary_expression(p):
@@ -403,6 +505,11 @@ def p_unary_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code 
+
     elif(p[2].parse == '('):
         p[0].parse = add_to_tree([p[0], p[3]], "sizeof")
         p[0].data["type"] = "int"
@@ -411,6 +518,14 @@ def p_unary_expression(p):
         p[0].parse = add_to_tree([p[0], p[2]], "sizeof")
         p[0].data["type"] = "int"
         p[0].data["class"] = "basic"
+
+        #------------3AC------------#
+        p[0].place = getNewTmp("int")
+        if p[2] == '(':
+            p[0].code = p[3].code+[quad("eq",[p[0].place,str(getSize(p[3].data["type"])),""],p[0].place+"= "+str(getSize(p[3].data["type"])))]
+        else:
+            pass
+
     else:
         p[0].parse = add_to_tree([p[0], p[2]], p[1].parse)
         p[0].data = setData(p, 2)
@@ -460,6 +575,10 @@ def p_cast_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
     else:
         p[0].parse = add_to_tree([p[0], p[2], p[4]])
         if(p[2].data["type"][-1] == '*') ^ (p[4].data["type"][-1] == '*'):
@@ -467,6 +586,11 @@ def p_cast_expression(p):
             exit()
         p[0].data = setData(p, 4)
         p[0].data["type"] = p[2].data["type"]
+
+        #------------3AC------------#
+        p[0].place = getNewTmp(p[0].data["type"])
+        p[0].code = p[4].code+[ quad(p[4].data["type"]+"_to_"+p[2].data["type"],[p[0].place,p[4].place,""],p[0].place+"="+ p[4].data["type"]+"_to_"+p[2].data["type"]+"("+p[4].place+")") ]
+
 
 
 def p_multiplicative_expression(p):
@@ -484,6 +608,11 @@ def p_multiplicative_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         if(p[2].data == '%'):
@@ -514,6 +643,11 @@ def p_additive_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         if(p[1].data["type"][-1] == '*'):
@@ -554,6 +688,11 @@ def p_shift_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int"]
@@ -579,6 +718,11 @@ def p_relational_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int", "float"]
@@ -612,6 +756,11 @@ def p_equality_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int", "float"]
@@ -644,6 +793,11 @@ def p_and_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int"]
@@ -667,6 +821,11 @@ def p_exclusive_or_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int"]
@@ -690,6 +849,11 @@ def p_inclusive_or_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int"]
@@ -713,6 +877,11 @@ def p_logical_and_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int", "float"]
@@ -740,6 +909,11 @@ def p_logical_or_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int", "float"]
@@ -767,6 +941,11 @@ def p_conditional_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3], p[5]], p[2].parse + p[4].parse)
         if p[1].data["type"] in ["void", "void*"] or p[1].data["class"] in ["struct", "union"] :
@@ -789,6 +968,11 @@ def p_assignment_expression(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         if p[1].data["class"] in ["struct", "union"] or p[3].data["class"] in ["struct", "union"] or p[1].data["type"][-1] == '*' and p[3].data["type"] == "float" or p[3].data["type"][-1] == '*' and p[1].data["type"] == "float":
@@ -836,6 +1020,11 @@ def p_expression(p):
     if(len(p) == 2):
         p[0].parse = [p[1].parse]
         p[0].data = setData(p, 1)
+
+        #------------3AC------------#
+        p[0].place = p[1].place
+        p[0].code = p[1].code
+        
     else:
         p[0].parse = p[1].parse
         p[0].parse.append(p[3].parse)
@@ -850,6 +1039,11 @@ def p_constant_expression(p):
             p[i] = p_
     p[0].parse = p[1].parse
     p[0].data = setData(p, 1)
+
+    #------------3AC------------#
+    p[0].place = p[1].place
+    p[0].code = p[1].code
+        
 
 
 def p_declaration(p):
@@ -867,7 +1061,7 @@ def p_declaration(p):
             if(t[0] == '='):
                 p[0].parse.append(t)
         
-        size = {"void" : 0, "char" : 1, "int" : 4, "float" : 4}
+
 
         for decl in p[2].data:
             data = setData(p, 1)
@@ -886,10 +1080,7 @@ def p_declaration(p):
                 if(res != False):
                     data["size"] = res["size"]
             else:
-                if(data["type"][-1] == '*'):
-                    data["size"] = 8
-                else:
-                    data["size"] = size[data["type"]]
+                data["size"] = getSize[data["type"]]
             data["offset"] = getOffset()
             addToOffset(data["size"])
             res = pushEntry(decl["name"], data)
@@ -1074,8 +1265,7 @@ def p_struct_declaration(p):
             p_.parse = p[i]
             p[i] = p_
     # p[0].parse = [p[1].parse, p[2].parse]
-    size = {"void" : 0, "char" : 1, "int" : 4, "float" : 8}
-
+    
     for decl in p[2].data:
         data = setData(p, 1)
         if(data["type"] == "void"):
@@ -1083,7 +1273,7 @@ def p_struct_declaration(p):
             exit()
         data["name"] = decl["name"]
         # data["meta"] = decl["meta"]
-        data["size"] = size[data["type"]]
+        data["size"] = getSize[data["type"]]
         data["offset"] = getOffset()
         addToOffset(data["size"])
         res = pushEntry(decl["name"], data)
