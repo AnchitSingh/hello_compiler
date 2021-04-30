@@ -356,25 +356,22 @@ def p_primary_expression(p):
             p[0].data = {"type": "int", "class": "basic",
                          "value": p[1].data, "name": None}
 
-            #------------3AC------------#
             p[0].place = getNewTmp(p[0].data["type"])
-            p[0].code = [quad("eqconst"+p[0].data["type"], [p[0].place, str(
+            p[0].code = [quad("=", [p[0].place, str(
                 p[0].data["value"]), ""], p[0].place + " = " + str(p[0].data["value"]))]
         elif isinstance(p[1].data, float):
             p[0].data = {"type": "float", "class": "basic",
                          "value": p[1].data, "name": None}
 
-            #------------3AC------------#
             p[0].place = getNewTmp(p[0].data["type"])
-            p[0].code = [quad("eqconst"+p[0].data["type"], [p[0].place, str(
+            p[0].code = [quad("=", [p[0].place, str(
                 p[0].data["value"]), ""], p[0].place + " = " + str(p[0].data["value"]))]
         elif isinstance(p[1].data, str) and p[1].data[0] == '"':
             p[0].data = {"type": "char*", "class": "basic",
                          "value": p[1].data, "name": None}
 
-            #------------3AC------------#
             p[0].place = getNewTmp(p[0].data["type"])
-            p[0].code = [quad("eqconst"+p[0].data["type"], [p[0].place, str(
+            p[0].code = [quad("=", [p[0].place, str(
                 p[0].data["value"]), ""], p[0].place + " = " + str(p[0].data["value"]))]
         else:
             res, scp = checkEntry(p[1].data)
@@ -382,18 +379,16 @@ def p_primary_expression(p):
                 print("Error at line : " + str(p.lineno(1)) + " :: " +
                       p[1].data + " | Identifier is not declared")
                 exit()
-            p[0].data = res
+            p[0].data = res.copy()
 
-            #------------3AC------------#
             p[0].place = p[1].data + "@" + str(scp)
             p[0].code = [""]
     else:
         p[0].parse = p[2].parse
         p[0].data = setData(p, 2)
 
-        #------------3AC------------#
         p[0].place = p[2].place
-        p[0].code = p[2].code
+        p[0].code = p[2].code.copy()
 
 
 # distinguish static array from pointer
@@ -416,7 +411,6 @@ def p_postfix_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code.copy()
 
@@ -430,19 +424,9 @@ def p_postfix_expression(p):
         p[0].data["type"] = p[1].data["type"]
         p[0].data["class"] = "basic"
 
-        #------------3AC------------#
         p[0].place = p[1].place
-        tmp = NODE()
-        tmp.data["type"] = "int"
-        tmp.place = getNewTmp("int")
-        x = type_cast(tmp.data["type"], p[1].data["type"],
-                      tmp.place, p[1].place)
-        p[0].data["type"] = x["type"]
-        tmp_entry = getNewTmp(x["type"])
-        tmp_code = [quad(p[2].parse[0], [tmp_entry, p[1].place, tmp.place],
-                         tmp_entry + " = " + p[1].place + " " + p[2].parse[0] + " "+tmp.place)]
-        p[0].code = p[1].code+[quad("eq", [tmp.place, "1", ""], tmp.place+" = 1")]+x["code"]+tmp_code+[
-            quad("eq", [p[0].place, tmp_entry], p[0].place+"="+tmp_entry)]
+        p[0].code = p[1].code + [quad("=", [p[0].place, p[1].place], p[0].place + " = " + p[1].place)] + [
+            quad(p[2].parse, [p[1].place], p[1].place + p[2].parse)]
 
     elif(p[2].parse == '['):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], "[]")
@@ -465,18 +449,41 @@ def p_postfix_expression(p):
             exit()
         if(p[2].parse == '.'):
             res, scp = checkEntry(p[1].data["type"], 0)
+            res_, scp_ = checkEntry(p[3].parse, res["members_scope"])
+            if(res_ == False):
+                print("Error at line : " + str(p.lineno(0)) + " :: " +
+                      p[3].parse + " | Identifier used is not in struct member list")
+                exit()
+            p[0].data = res_.copy()
+
+            res__, scp__ = checkEntry(p[1].place)
+            tmpvar = getNewTmp("int*")
+            (base, op) = (
+                "rbp", "-") if str(res__["base"]) == "rbp" else ("0", "+")
+            p[0].place = getNewTmp(res_["type"], tmpvar, res_["size"], base)
+            p[0].code = p[1].code + \
+                [quad(op, [tmpvar, res__["offset"], res__["size"] - res_["offset"]])]
+            p[0].data["offset"] = tmpvar
+            p[0].data["base"] = base
         else:
             if(p[1].data["type"][-1] != '*'):
                 print("Error at line : " + str(p.lineno(0)) + " :: " +
                       p[1].data["name"] + " | Identifier used is not a struct pointer")
                 exit()
             res, scp = checkEntry(p[1].data["type"][:-1], 0)
-        res, scp = checkEntry(p[3].parse, res["members_scope"])
-        if(res == False):
-            print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  p[3].parse + " | Identifier used is not in struct member list")
-            exit()
-        p[0].data = res
+            res_, scp_ = checkEntry(p[3].parse, res["members_scope"])
+            if(res_ == False):
+                print("Error at line : " + str(p.lineno(0)) + " :: " +
+                      p[3].parse + " | Identifier used is not in struct member list")
+                exit()
+            p[0].data = res_.copy()
+
+            tmpvar = getNewTmp("int*")
+            p[0].place = getNewTmp(res_["type"], tmpvar, res_["size"], "0")
+            p[0].code = p[1].code + \
+                [quad("+", [tmpvar, p[1].place, res["size"] - res_["offset"]])]
+            p[0].data["offset"] = tmpvar
+            p[0].data["base"] = "0"
     elif(p[3].parse == ')'):
         p[0].parse = add_to_tree([p[0]], p[1].parse + "()")
         res, scp = checkEntry(p[1].data["name"], 0)
@@ -522,7 +529,6 @@ def p_argument_expression_list(p):
         p[0].parse = [p[1].parse]
         p[0].data = [setData(p, 1)]
 
-        #------------3AC------------#
         p[0].place = [p[1].place]
         p[0].code = p[1].code
 
@@ -532,7 +538,6 @@ def p_argument_expression_list(p):
         p[0].data = p[1].data
         p[0].data.append(setData(p, 3))
 
-        #------------3AC------------#
         p[0].place = [p[3].place] + p[1].place
         p[0].code = p[1].code + p[3].code
 
@@ -553,7 +558,6 @@ def p_unary_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -561,31 +565,66 @@ def p_unary_expression(p):
         p[0].parse = add_to_tree([p[0], p[3]], "sizeof")
         p[0].data["type"] = "int"
         p[0].data["class"] = "basic"
+
+        p[0].place = getNewTmp("int")
+        p[0].code = p[3].code+[quad("=", [p[0].place, str(getSize(
+            p[3].data["type"])), ""], p[0].place+"= "+str(getSize(p[3].data["type"])))]
     elif(p[1].parse == 'sizeof'):
         p[0].parse = add_to_tree([p[0], p[2]], "sizeof")
         p[0].data["type"] = "int"
         p[0].data["class"] = "basic"
 
-        #------------3AC------------#
+        res, scp = checkEntry(p[2].place)
         p[0].place = getNewTmp("int")
-        if p[2] == '(':
-            p[0].code = p[3].code+[quad("eq", [p[0].place, str(getSize(
-                p[3].data["type"])), ""], p[0].place+"= "+str(getSize(p[3].data["type"])))]
-        else:
-            pass
-
+        p[0].code = p[2].code + \
+            [quad("=", [p[0].place, str(res["size"]), ""],
+                  p[0].place+"= "+str(res["size"]))]
     else:
         p[0].parse = add_to_tree([p[0], p[2]], p[1].parse)
         p[0].data = setData(p, 2)
         if(p[1].data == '&'):
             p[0].data["type"] = p[2].data["type"] + '*'
+
+            p[0].place = getNewTmp(p[0].data["type"])
+            p[0].code = p[2].code + \
+                [quad("lea", [p[0].place, p[2].place],
+                      p[0].place + " = & " + p[2].place)]
         elif(p[1].data == '*'):
+            if p[2].data["type"][-1] != '*':
+                print("Error at line : " + str(p.lineno(0)) + " :: " +
+                      p[2].data["name"] + " | Error dereferencing non pointer variable")
+                exit()
             p[0].data["type"] = p[2].data["type"][:-1]
+
+            p[0].place = getNewTmp(
+                p[0].data["type"], p[2].place, size=getSize(p[0].data["type"]), base="0")
+            p[0].code = p[2].code
         elif(p[1].data == '!'):
             p[0].data["type"] = "int"
             p[0].data["class"] = "basic"
+
+            p[0].place = getNewTmp(p[0].data["type"])
+            p[0].code = p[2].code + [quad(p[1].data, [p[0].place, p[2].place, ""],
+                                          p[0].place + " = " + p[1].data + " " + p[2].place)]
         elif(p[1].data in ['+', '-', '~']):
+            if p[2].data["class"] != 'basic':
+                print("Error at line : " + str(p.lineno(0)) + " :: " +
+                      p[2].data["name"] + " | Type not compatible with unary operator")
+                exit()
             p[0].data["type"] = p[2].data["type"]
+
+            if(p[1].data == '~'):
+                p[0].place = getNewTmp(p[0].data["type"])
+                p[0].code = p[2].code + [quad(p[1].data, [p[0].place, p[2].place, ""],
+                                              p[0].place + " = " + p[1].data + " " + p[2].place)]
+            elif(p[1].data == '+'):
+                p[0].code = p[2].code
+                p[0].place = p[2].place
+            else:
+                p[0].place = getNewTmp(p[2].data["type"])
+                p[0].code = p[2].code + \
+                    [quad("*", [p[0].place, "-1", p[2].place],
+                          p[0].place + " = " + " -1 * " + p[2].place)]
         else:
             allowed_type = ["char", "int", "float"]
             if p[2].data["type"] not in allowed_type or p[2].data["type"][-1] != '*':
@@ -595,17 +634,8 @@ def p_unary_expression(p):
             p[0].data["type"] = p[2].data["type"]
 
             p[0].place = p[2].place
-            tmp = NODE()
-            tmp.data["type"] = "int"
-            tmp.place = getNewTmp("int")
-            x = type_cast(tmp.data["type"],
-                          p[2].data["type"], tmp.place, p[2].place)
-            p[0].data["type"] = x["type"]
-            tmp_entry = getNewTmp(x["type"])
-            tmp_code = [quad(p[1].parse[0], [tmp_entry, p[2].place, tmp.place],
-                             tmp_entry + " = " + p[2].place + " " + p[1].parse[0] + " "+tmp.place)]
-            p[0].code = p[2].code+[quad("eq", [tmp.place, "1", ""], tmp.place+" = 1")]+x["code"]+tmp_code+[
-                quad("eq", [p[0].place, tmp_entry], p[0].place+"="+tmp_entry)]
+            p[0].code = p[2].code + \
+                [quad(p[1].parse, [p[2].place], p[2].place + p[1].parse)]
 
 
 def p_unary_operator(p):
@@ -638,7 +668,6 @@ def p_cast_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
     else:
@@ -650,9 +679,8 @@ def p_cast_expression(p):
         p[0].data = setData(p, 4)
         p[0].data["type"] = p[2].data["type"]
 
-        #------------3AC------------#
         p[0].place = getNewTmp(p[0].data["type"])
-        p[0].code = p[4].code+[quad(p[4].data["type"]+"_to_"+p[2].data["type"], [p[0].place, p[4].place, ""],
+        p[0].code = p[4].code + p[2].code + [quad(p[4].data["type"]+"_to_"+p[2].data["type"], [p[0].place, p[4].place, ""],
                                     p[0].place+"=" + p[4].data["type"]+"_to_"+p[2].data["type"]+"("+p[4].place+")")]
 
 
@@ -672,7 +700,6 @@ def p_multiplicative_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -1088,8 +1115,8 @@ def p_conditional_expression(p):
             print("Error at line : " + str(p.lineno(0)) + " :: " +
                   "Type not compatible with ternary operation")
             exit()
-        p[0].data["type"] = type_cast(
-            p[3].data["type"], p[5].data["type"])["type"]
+        # p[0].data["type"] = type_cast(
+        #     p[3].data["type"], p[5].data["type"])["type"]
         p[0].data["class"] = "basic"
 
 
@@ -1117,8 +1144,8 @@ def p_assignment_expression(p):
             print("Error at line : " + str(p.lineno(0)) + " :: " +
                   "Type not compatible with assignment operation")
             exit()
-        p[0].data["type"] = type_cast(
-            p[1].data["type"], p[3].data["type"])["type"]
+        # p[0].data["type"] = type_cast(
+        #     p[1].data["type"], p[3].data["type"])["type"]
         p[0].data["class"] = "basic"
 
 
@@ -1258,11 +1285,15 @@ def p_init_declarator_list(p):
     if(len(p) == 2):
         p[0].parse = [p[1].parse]
         p[0].data = [setData(p, 1)]
+
+        p[0].code = p[1].code.copy()
     else:
         p[0].parse = p[1].parse
         p[0].parse.append(p[3].parse)
         p[0].data = setData(p, 1)
         p[0].data.append(setData(p, 3))
+
+        p[0].code = p[1].code + p[3].code
 
 
 def p_init_declarator(p):
@@ -1279,6 +1310,9 @@ def p_init_declarator(p):
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         p[0].data["init_type"] = p[3].data["type"]
+
+        p[0].data["place"] = p[3].place
+        p[0].code = p[3].code.copy()
 
 
 def p_type_specifier(p):
@@ -1583,8 +1617,7 @@ def p_parameter_list(p):
 
 
 def p_parameter_declaration(p):
-    '''parameter_declaration : declaration_specifiers declarator
-                             | declaration_specifiers abstract_declarator'''
+    '''parameter_declaration : declaration_specifiers declarator'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -1650,6 +1683,9 @@ def p_initializer(p):
     if(len(p) == 2):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
+
+        p[0].place=p[1].place
+        p[0].code=p[1].code.copy()
     else:
         p[0].parse = '{' + str(p[2].parse)[1:-1] + '}'
         p[0].data = {}
@@ -1659,7 +1695,7 @@ def p_initializer(p):
                 print("Error at line : " + str(p.lineno(0)) +
                       " :: " + "Incompatible type initialisation")
                 exit()
-            init_type = type_cast(init_type, init["type"])["type"]
+            # init_type = type_cast(init_type, init["type"])["type"]
         p[0].data["type"] = init_type
 
 
@@ -1926,8 +1962,9 @@ def p_selection_statement_2(p):
         tmp1 = getNewTmp("int")
         tmp2 = getNewTmp("int")
         caselist = caselist + [quad("=", [tmp1, str(val), ""], tmp1+" = "+str(val))] + [quad("-", [tmp2, test, tmp1], tmp2 +
-                                                                                              " = "+test+" - "+tmp1), quad("ifz", [tmp2, p[5].code[idx]["label"], ""], "ifz "+tmp2+" goto->"+p[5].code[idx]["label"])]
-    caselist = caselist + [quad("goto", [default_label], "goto->" + default_label)]
+                                                                                             " = "+test+" - "+tmp1), quad("ifz", [tmp2, p[5].code[idx]["label"], ""], "ifz "+tmp2+" goto->"+p[5].code[idx]["label"])]
+    caselist = caselist + \
+        [quad("goto", [default_label], "goto->" + default_label)]
     for idx, code in enumerate(p[5].code):
         tmp_code = code["statement"]
         tmp_code = [quad("goto", [p[0].after], "goto->"+p[0].after)
@@ -2072,7 +2109,8 @@ def p_jump_statement(p):
     else:
         p[0].parse = add_to_tree([p[0], p[2]], p[1].parse)
         p[0].data["ret_type"] = p[2].data["type"]
-        p[0].code = p[2].code + [quad("return", [p[2].place, "", ""], "return "+p[2].place)]
+        p[0].code = p[2].code + \
+            [quad("return", [p[2].place, "", ""], "return "+p[2].place)]
 
 
 def p_translation_unit(p):
