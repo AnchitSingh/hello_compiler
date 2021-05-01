@@ -723,9 +723,8 @@ def p_multiplicative_expression(p):
         x = type_cast(p[1].data["type"], p[3].data["type"],
                       p[1].place, p[3].place)
         p[0].data["type"] = x["type"]
-        tmp_entry = getNewTmp(x["type"])
-        tmp_code = [quad(p[2].parse, [tmp_entry, p[1].place, p[3].place],
-                         tmp_entry + " = " + p[1].place + " " + p[2].parse + " "+p[3].place)]
+        p[0].place = getNewTmp(x["type"])
+        tmp_code = [quad(p[2].data, [ p[0].place , p[1].place, p[3].place ])]
         p[0].code = p[1].code+p[3].code+x["code"]+tmp_code
 
 
@@ -757,6 +756,12 @@ def p_additive_expression(p):
                       "Type incompatible for pointer with minus or plus operation")
                 exit()
             p[0].data["type"] = p[1].data["type"]
+
+            tmp = getNewTmp(p[3].data["type"])
+            tmp_code = [ quad("*", [ tmp , p[3].place , str(getSize(p[1].data["type"][:-1] ) )] ) ]
+            p[0].place = getNewTmp(p[1].data["type"])
+            p[0].code = p[1].code + p[3].code + tmp_code + [ quad( p[2].data, [ p[0].place ,p[1].place ,tmp] ) ]
+        
         elif(p[3].data["type"][-1] == '*'):
             allowed_type = ["char", "int"]
             if(p[1].data["type"] not in allowed_type):
@@ -768,6 +773,12 @@ def p_additive_expression(p):
                       "Integer minus pointer is not compatible expression")
                 exit()
             p[0].data["type"] = p[3].data["type"]
+
+            tmp = getNewTmp(p[1].data["type"])
+            tmp_code = [ quad("*", [ tmp , p[1].place , str(getSize(p[3].data["type"][:-1] ) )] ) ]
+            p[0].place = getNewTmp(p[3].data["type"])
+            p[0].code = p[1].code + p[3].code + tmp_code + [ quad( p[2].data, [ p[0].place ,p[3].place ,tmp] ) ]
+
         else:
             allowed_type = ["char", "int", "float"]
             if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
@@ -780,9 +791,8 @@ def p_additive_expression(p):
             x = type_cast(p[1].data["type"], p[3].data["type"],
                           p[1].place, p[3].place)
             p[0].data["type"] = x["type"]
-            tmp_entry = getNewTmp(x["type"])
-            tmp_code = [quad(p[2].parse, [tmp_entry, p[1].place, p[3].place],
-                             tmp_entry + " = " + p[1].place + " " + p[2].parse + " "+p[3].place)]
+            p[0].place = getNewTmp(x["type"])
+            tmp_code = [quad(p[2].data, [ p[0].place , p[1].place, p[3].place ])]
             p[0].code = p[1].code+p[3].code+x["code"]+tmp_code
 
 
@@ -814,9 +824,9 @@ def p_shift_expression(p):
             exit()
         p[0].data["type"] = p[1].data["type"]
 
-        p[0].place = getNewTmp("int")
-        p[0].code = p[1].code + p[3].code + [quad(str(p[2].data), [
-                                                  p[0].place, p[1].place, p[3].place], p[0].place + " = " + p[1].place + str(p[2].data) + p[3].place)]
+        p[0].place = getNewTmp(p[1].data["type"])
+        p[0].code = p[1].code + p[3].code + [ quad(p[2].data, [
+                                                  p[0].place, p[1].place, p[3].place]) ]
 
 
 def p_relational_expression(p):
@@ -836,7 +846,6 @@ def p_relational_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -844,26 +853,24 @@ def p_relational_expression(p):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int", "float"]
         if p[1].data["type"][-1] == '*' and p[3].data["type"][-1] == '*':
-            p[0].data["type"] = "int"
-            return
+            pass
         elif p[1].data["type"][-1] == '*' and p[3].data["type"] not in ["char", "int"]:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with relational operation")
+                  "Type not compatible with relational operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         elif p[3].data["type"][-1] == '*' and p[1].data["type"] not in ["char", "int"]:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with relational operation")
+                  "Type not compatible with relational operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with relational operation")
+                  "Type not compatible with relational operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         p[0].data["type"] = "int"
         p[0].data["class"] = "basic"
 
-        tmp_entry = getNewTmp("int")
-        tmp_code = [quad(p[2].parse, [tmp_entry, p[1].place, p[3].place],
-                         tmp_entry + " = " + p[1].place + " " + p[2].parse + " "+p[3].place)]
+        p[0].place = getNewTmp("int")
+        tmp_code = [quad(p[2].data, [p[0].place, p[1].place, p[3].place])]
         p[0].code = p[1].code+p[3].code+tmp_code
 
 
@@ -882,7 +889,6 @@ def p_equality_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -890,26 +896,24 @@ def p_equality_expression(p):
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         allowed_type = ["char", "int", "float"]
         if p[1].data["type"][-1] == '*' and p[3].data["type"][-1] == '*':
-            p[0].data["type"] = "int"
-            return
+            pass
         elif p[1].data["type"][-1] == '*' and p[3].data["type"] not in ["char", "int"]:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with relational operation")
+                  "Type not compatible with relational operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         elif p[3].data["type"][-1] == '*' and p[1].data["type"] not in ["char", "int"]:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with relational operation")
+                  "Type not compatible with relational operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with relational operation")
+                  "Type not compatible with relational operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         p[0].data["type"] = "int"
         p[0].data["class"] = "basic"
 
-        tmp_entry = getNewTmp("int")
-        tmp_code = [quad(p[2].parse, [tmp_entry, p[1].place, p[3].place],
-                         tmp_entry + " = " + p[1].place + " " + p[2].parse + " "+p[3].place)]
+        p[0].place = getNewTmp("int")
+        tmp_code = [quad(p[2].data, [p[0].place, p[1].place, p[3].place])]
         p[0].code = p[1].code+p[3].code+tmp_code
 
 
@@ -936,17 +940,16 @@ def p_and_expression(p):
         allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with bitwise and operation")
+                  "Type not compatible with bitwise and operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         # p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])["type"]
         p[0].data["class"] = "basic"
 
         x = type_cast(p[1].data["type"], p[3].data["type"],
-                      p[1].place, p[3].place)
+                          p[1].place, p[3].place)
         p[0].data["type"] = x["type"]
-        tmp_entry = getNewTmp(x["type"])
-        tmp_code = [quad(p[2].parse, [tmp_entry, p[1].place, p[3].place],
-                         tmp_entry + " = " + p[1].place + " " + p[2].parse + " "+p[3].place)]
+        p[0].place = getNewTmp(x["type"])
+        tmp_code = [quad(p[2].data, [ p[0].place , p[1].place, p[3].place ])]
         p[0].code = p[1].code+p[3].code+x["code"]+tmp_code
 
 
@@ -964,7 +967,6 @@ def p_exclusive_or_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -973,17 +975,16 @@ def p_exclusive_or_expression(p):
         allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with bitwise xor operation")
+                  "Type not compatible with bitwise xor operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         # p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])["type"]
         p[0].data["class"] = "basic"
 
         x = type_cast(p[1].data["type"], p[3].data["type"],
-                      p[1].place, p[3].place)
+                          p[1].place, p[3].place)
         p[0].data["type"] = x["type"]
-        tmp_entry = getNewTmp(x["type"])
-        tmp_code = [quad(p[2].parse, [tmp_entry, p[1].place, p[3].place],
-                         tmp_entry + " = " + p[1].place + " " + p[2].parse + " "+p[3].place)]
+        p[0].place = getNewTmp(x["type"])
+        tmp_code = [quad(p[2].data, [ p[0].place , p[1].place, p[3].place ])]
         p[0].code = p[1].code+p[3].code+x["code"]+tmp_code
 
 
@@ -1001,7 +1002,6 @@ def p_inclusive_or_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -1010,17 +1010,16 @@ def p_inclusive_or_expression(p):
         allowed_type = ["char", "int"]
         if p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with bitwise or operation")
+                  "Type not compatible with bitwise or operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         # p[0].data["type"] = type_cast(p[1].data["type"], p[3].data["type"])["type"]
         p[0].data["class"] = "basic"
 
         x = type_cast(p[1].data["type"], p[3].data["type"],
-                      p[1].place, p[3].place)
+                          p[1].place, p[3].place)
         p[0].data["type"] = x["type"]
-        tmp_entry = getNewTmp(x["type"])
-        tmp_code = [quad(p[2].parse, [tmp_entry, p[1].place, p[3].place],
-                         tmp_entry + " = " + p[1].place + " " + p[2].parse + " "+p[3].place)]
+        p[0].place = getNewTmp(x["type"])
+        tmp_code = [quad(p[2].data, [ p[0].place , p[1].place, p[3].place ])]
         p[0].code = p[1].code+p[3].code+x["code"]+tmp_code
 
 
@@ -1038,7 +1037,6 @@ def p_logical_and_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -1051,11 +1049,14 @@ def p_logical_and_expression(p):
             return
         elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with logical and operation")
+                  "Type not compatible with logical and operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         p[0].data["type"] = "int"
         p[0].data["class"] = "basic"
 
+        p[0].place = getNewTmp("int")
+        tmp_code = [quad(p[2].data, [p[0].place, p[1].place, p[3].place])]
+        p[0].code = p[1].code+p[3].code+tmp_code
 
 def p_logical_or_expression(p):
     '''logical_or_expression : logical_and_expression
@@ -1071,7 +1072,6 @@ def p_logical_or_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -1084,10 +1084,14 @@ def p_logical_or_expression(p):
             return
         elif p[1].data["type"] not in allowed_type or p[3].data["type"] not in allowed_type:
             print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  "Type not compatible with logical or operation")
+                  "Type not compatible with logical or operation " + p[1].data["type"] + ", " + p[3].data["type"])
             exit()
         p[0].data["type"] = "int"
         p[0].data["class"] = "basic"
+
+        p[0].place = getNewTmp("int")
+        tmp_code = [quad(p[2].data, [p[0].place, p[1].place, p[3].place])]
+        p[0].code = p[1].code+p[3].code+tmp_code
 
 
 def p_conditional_expression(p):
@@ -1104,7 +1108,6 @@ def p_conditional_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -1115,9 +1118,26 @@ def p_conditional_expression(p):
             print("Error at line : " + str(p.lineno(0)) + " :: " +
                   "Type not compatible with ternary operation")
             exit()
+        if p[3].data["type"] != p[5].data["type"]:
+            print("Error at line : " + str(p.lineno(0)) + " :: " +
+                  "Type mismatch with ternary operation")
+            exit()
         # p[0].data["type"] = type_cast(
         #     p[3].data["type"], p[5].data["type"])["type"]
         p[0].data["class"] = "basic"
+
+        #handle float
+        if p[1].data["type"] == "int":
+            x = {"place": p[1].place, "code": [], "type": "int"}
+        else:
+            tmp = getNewTmp("int")
+            x = {"place": tmp, "code": [quad(p[1].data["type"] + "_to_"+ "int", [tmp, p[1].place, ''], tmp + " = " + p[1].data["type"] +"_to_"+ "int" +"("+ p[1].place +")")], "type": "int"}
+        p[0].data["type"] = p[3].data["type"]
+        p[0].place = getNewTmp(p[0].data["type"])
+        p[0].else_ = getNewLabel("else_part")
+        p[0].after = getNewLabel("after")
+        tmp_code = [quad("ifz", [p[1].place,  p[0].else_, ""], "ifz " + p[1].place + " goto->" + p[0].else_)] + p[3].code + [quad("goto", [p[0].after, "", ""], "goto->" + p[0].after)]
+        p[0].code = p[1].code + x["code"] + tmp_code + [quad("label", [p[0].else_, "", ""], p[0].else_ + ":")] +  p[5].code + [quad("label", [p[0].after, "", ""], p[0].after + ":")]
 
 
 # type checking handling
@@ -1134,7 +1154,6 @@ def p_assignment_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
         p[0].code = p[1].code
 
@@ -1147,6 +1166,8 @@ def p_assignment_expression(p):
         # p[0].data["type"] = type_cast(
         #     p[1].data["type"], p[3].data["type"])["type"]
         p[0].data["class"] = "basic"
+
+
 
 
 def p_assignment_operator(p):
