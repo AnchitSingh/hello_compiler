@@ -216,8 +216,14 @@ def getSize(type_):
     size = {"void": 0, "char": 1, "int": 4, "float": 4}
     if(type_[-1] == '*'):
         return 8
-    else:
+    elif type_ in size.keys():
         return size[type_]
+    else:
+        struct_info, scp = checkEntry(type_, 0)
+        if struct_info ==  False:
+            print(" Error :: struct " + type_ + " is not defined")
+            exit(-1)
+        return struct_info["size"]
 
 #--------------------------FUNCTIONS FOR 3AC-----------------------------------#
 
@@ -317,7 +323,7 @@ def p_program(p):
                 "continue should be inside for/do-while/while !!", "continue")
 
     global filename
-    cfile = open("3AC-code", 'w')
+    cfile = open("3AC.code", 'w')
     cod = []
     for i in p[0].code:
         if re.fullmatch('[ ]*', i) == None:
@@ -333,7 +339,7 @@ def p_program(p):
         cfile.write('{0:3}'.format(x) + "::" + i + "\n")
         x = x + 1
 
-    bin3ac = open("3AC-code.obj", "wb")
+    bin3ac = open("3AC.obj", "wb")
     pickle.dump(cod, bin3ac)
 
 
@@ -461,7 +467,7 @@ def p_postfix_expression(p):
             (base, op) = (
                 "rbp", "-") if str(res__["base"]) == "rbp" else ("0", "+")
             p[0].place = getNewTmp(res_["type"], tmpvar, res_["size"], base)
-            p[0].code = p[1].code + \
+            p[0].code = p[1].code + 
                 [quad(op, [tmpvar, res__["offset"], res__["size"] - res_["offset"]])]
             p[0].data["offset"] = tmpvar
             p[0].data["base"] = base
@@ -480,7 +486,7 @@ def p_postfix_expression(p):
 
             tmpvar = getNewTmp("int*")
             p[0].place = getNewTmp(res_["type"], tmpvar, res_["size"], "0")
-            p[0].code = p[1].code + \
+            p[0].code = p[1].code + 
                 [quad("+", [tmpvar, p[1].place, res["size"] - res_["offset"]])]
             p[0].data["offset"] = tmpvar
             p[0].data["base"] = "0"
@@ -530,7 +536,7 @@ def p_argument_expression_list(p):
         p[0].data = [setData(p, 1)]
 
         p[0].place = [p[1].place]
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = p[1].parse
@@ -559,7 +565,7 @@ def p_unary_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     elif(p[2].parse == '('):
         p[0].parse = add_to_tree([p[0], p[3]], "sizeof")
@@ -576,7 +582,7 @@ def p_unary_expression(p):
 
         res, scp = checkEntry(p[2].place)
         p[0].place = getNewTmp("int")
-        p[0].code = p[2].code + \
+        p[0].code = p[2].code + 
             [quad("=", [p[0].place, str(res["size"]), ""],
                   p[0].place+"= "+str(res["size"]))]
     else:
@@ -586,7 +592,7 @@ def p_unary_expression(p):
             p[0].data["type"] = p[2].data["type"] + '*'
 
             p[0].place = getNewTmp(p[0].data["type"])
-            p[0].code = p[2].code + \
+            p[0].code = p[2].code + 
                 [quad("lea", [p[0].place, p[2].place],
                       p[0].place + " = & " + p[2].place)]
         elif(p[1].data == '*'):
@@ -598,7 +604,7 @@ def p_unary_expression(p):
 
             p[0].place = getNewTmp(
                 p[0].data["type"], p[2].place, size=getSize(p[0].data["type"]), base="0")
-            p[0].code = p[2].code
+            p[0].code = p[2].code.copy()
         elif(p[1].data == '!'):
             p[0].data["type"] = "int"
             p[0].data["class"] = "basic"
@@ -618,11 +624,11 @@ def p_unary_expression(p):
                 p[0].code = p[2].code + [quad(p[1].data, [p[0].place, p[2].place, ""],
                                               p[0].place + " = " + p[1].data + " " + p[2].place)]
             elif(p[1].data == '+'):
-                p[0].code = p[2].code
+                p[0].code = p[2].code.copy()
                 p[0].place = p[2].place
             else:
                 p[0].place = getNewTmp(p[2].data["type"])
-                p[0].code = p[2].code + \
+                p[0].code = p[2].code + 
                     [quad("*", [p[0].place, "-1", p[2].place],
                           p[0].place + " = " + " -1 * " + p[2].place)]
         else:
@@ -634,7 +640,7 @@ def p_unary_expression(p):
             p[0].data["type"] = p[2].data["type"]
 
             p[0].place = p[2].place
-            p[0].code = p[2].code + \
+            p[0].code = p[2].code + 
                 [quad(p[1].parse, [p[2].place], p[2].place + p[1].parse)]
 
 
@@ -669,7 +675,7 @@ def p_cast_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
     else:
         p[0].parse = add_to_tree([p[0], p[2], p[4]])
         if(p[2].data["type"][-1] == '*') ^ (p[4].data["type"][-1] == '*'):
@@ -701,7 +707,7 @@ def p_multiplicative_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -743,9 +749,8 @@ def p_additive_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -811,9 +816,8 @@ def p_shift_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -847,7 +851,7 @@ def p_relational_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -890,7 +894,7 @@ def p_equality_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -931,9 +935,8 @@ def p_and_expression(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -968,7 +971,7 @@ def p_exclusive_or_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -1003,7 +1006,7 @@ def p_inclusive_or_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -1038,7 +1041,7 @@ def p_logical_and_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -1058,6 +1061,7 @@ def p_logical_and_expression(p):
         tmp_code = [quad(p[2].data, [p[0].place, p[1].place, p[3].place])]
         p[0].code = p[1].code+p[3].code+tmp_code
 
+
 def p_logical_or_expression(p):
     '''logical_or_expression : logical_and_expression
                              | logical_or_expression LOGICAL_OR logical_and_expression'''
@@ -1073,7 +1077,7 @@ def p_logical_or_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
@@ -1109,7 +1113,7 @@ def p_conditional_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree(
@@ -1155,11 +1159,11 @@ def p_assignment_expression(p):
         p[0].data = setData(p, 1)
 
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
 
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
-        if p[1].data["class"] in ["struct", "union"] or p[3].data["class"] in ["struct", "union"] or p[1].data["type"][-1] == '*' and p[3].data["type"] == "float" or p[3].data["type"][-1] == '*' and p[1].data["type"] == "float":
+        if p[1].data["class"] in ["struct", "union"] or p[3].data["class"] in ["struct", "union"] or p[1].data["type"][-1] == '*' and p[3].data["type"] == "float" or p[3].data["type"][-1] == '*' and p[1].data["type"] == "float" or p[1].data["type"] == "void" or p[3].data["type"] == "void":
             print("Error at line : " + str(p.lineno(0)) + " :: " +
                   "Type not compatible with assignment operation")
             exit()
@@ -1167,7 +1171,21 @@ def p_assignment_expression(p):
         #     p[1].data["type"], p[3].data["type"])["type"]
         p[0].data["class"] = "basic"
 
-
+        if p[2].data == "=":
+            tmp_code = [quad(p[2].data, [p[1].place, p[3].place])]
+        else:
+            if p[2].data[0] in ["*", "/", "%", "+", "-", "&", "|", "^"]:
+                x = type_cast(p[1].data["type"], p[3].data["type"],
+                      p[1].place, p[3].place)
+                p[0].data["type"] = x["type"]
+                tmp_entry = getNewTmp(x["type"])
+                tmp_code = x["code"] + [quad(p[2].data[:-1], [ tmp_entry , p[1].place, p[3].place ])]
+            else:
+                tmp_entry = getNewTmp(p[1].data["type"])
+                tmp_code = [ quad(p[2].data[:-1], [ tmp_entry, p[1].place, p[3].place]) ]
+            
+            tmp_code = tmp_code + [quad(p[2].data[-1], [p[1].place, tmp_entry])]
+        p[0].code = p[3].code + p[1].code + tmp_code
 
 
 def p_assignment_operator(p):
@@ -1209,13 +1227,14 @@ def p_expression(p):
         p[0].parse = [p[1].parse]
         p[0].data = setData(p, 1)
 
-        #------------3AC------------#
         p[0].place = p[1].place
-        p[0].code = p[1].code
-
+        p[0].code = p[1].code.copy()
     else:
         p[0].parse = p[1].parse
         p[0].parse.append(p[3].parse)
+
+        p[0].place = p[1].place
+        p[0].code = p[1].code + p[3].code
 
 
 def p_constant_expression(p):
@@ -1228,14 +1247,15 @@ def p_constant_expression(p):
     p[0].parse = p[1].parse
     p[0].data = setData(p, 1)
 
-    #------------3AC------------#
     p[0].place = p[1].place
-    p[0].code = p[1].code
+    p[0].code = p[1].code.copy()
 
 
 def p_declaration(p):
     '''declaration : declaration_specifiers STMT_TERMINATOR
                    | declaration_specifiers init_declarator_list STMT_TERMINATOR'''
+    global currentScopeId
+    
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -1250,7 +1270,7 @@ def p_declaration(p):
 
         for decl in p[2].data:
             data = setData(p, 1)
-            if(data["type"] == "void"):
+            if(data["type"] == "void" or data["type"][:-1] == "void"):
                 print("Error at line : " + str(p.lineno(0)) + " :: " +
                       data["name"] + " | Can not declare void type variable")
                 exit()
@@ -1260,23 +1280,53 @@ def p_declaration(p):
                           " :: " + "Incompatible type initialisation")
                     exit()
             data["name"] = decl["name"]
-            # data["meta"] = decl["meta"]
-            data["type"] = data["type"] + decl["type"]
-            if(data["class"] == "struct" or data["class"] == "union"):
-                res, scp = checkEntry(data["type"], 0)
-                if(res != False):
-                    data["size"] = res["size"]
+            data["meta"] = decl["meta"]
+
+            if len(data["meta"]) != 0:
+                data["is_array"] = 1
+                data["element_type"] = data["type"][:-1]
+                data["index"] = 1
+                data["to_add"] = "0"
+
+                arr_size = 1
+                for n in data["meta"]:
+                    arr_size = arr_size * n
+
+                data["size"] = getSize(data["element_type"]) * arr_size
+                addToOffset(data["size"])
+                data["offset"] = getOffset() - data["size"] if currentScopeId == 0 else getOffset() 
+                data["base"] = "0" if currentScopeId == 0 else "rbp"
+                
+                res = pushEntry(decl["name"], data)
+                if(res == False):
+                    addToOffset(-data["size"])
+                    print("Error at line : " + str(p.lineno(0)) + " :: " +
+                        decl["name"] + " | Redeclaration of variable")
+                    exit()
             else:
-                data["size"] = getSize(data["type"])
-            data["offset"] = getOffset()
-            addToOffset(data["size"])
-            res = pushEntry(decl["name"], data)
-            if(res == False):
-                print("Error at line : " + str(p.lineno(0)) + " :: " +
-                      decl["name"] + " | Redeclaration of variable")
-                exit()
+                if(decl["type"] != ""):
+                    data["type"] = data["type"] + decl["type"]
+                if(data["class"] == "struct" or data["class"] == "union"):
+                    res, scp = checkEntry(data["type"], 0)
+                    if(res != False):
+                        data["size"] = res["size"]
+                else:
+                    data["size"] = getSize(data["type"])
+                addToOffset(data["size"])
+                data["offset"] = getOffset() - data["size"] if currentScopeId == 0 else getOffset()
+                data["base"] = "0" if currentScopeId == 0 else "rbp"
+                res = pushEntry(decl["name"], data)
+                if(res == False):
+                    print("Error at line : " + str(p.lineno(0)) + " :: " +
+                        decl["name"] + " | Redeclaration of variable")
+                    exit()
+
+                if "init_type" in decl.keys():
+                    tmp_code = [ quad("=",[ decl["name"]+"@"+str(currentScopeId) , decl["place"] ] ) ]
+                    p[0].code = p[0].code + code
     else:
         p[0].parse = p[1].parse
+        p[0].code = p[1].code.copy()
 
 
 def p_declaration_specifiers(p):
@@ -1336,7 +1386,7 @@ def p_init_declarator(p):
         p[0].code = p[3].code.copy()
 
 
-def p_type_specifier(p):
+def p_type_specifier_0(p):
     '''type_specifier : VOID
                       | CHAR
                       | SHORT
@@ -1345,25 +1395,30 @@ def p_type_specifier(p):
                       | FLOAT
                       | DOUBLE
                       | SIGNED
-                      | UNSIGNED
-                      | struct_or_union_specifier'''
+                      | UNSIGNED'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
             p_.parse = p[i]
-            if(p[i] in ["void", "char", "short", "int", "long", "float", "double", "signed", "unsigned"]):
-                p_.data = p[i]
+            p_.data = p[i]
             p[i] = p_
     p[0].parse = p[1].parse
-    if(p[1].data in ["void", "char", "short", "int", "long", "float", "double", "signed", "unsigned"]):
-        p[0].data = {"type": p[1].data, "class": "basic"}
-    else:
-        p[0].data = setData(p, 1)
+    p[0].data = {"type": p[1].data, "class": "basic"}
+
+
+def p_type_specifier_1(p):
+    '''type_specifier : struct_or_union_specifier'''
+    for i in range(len(p)):
+        if not isinstance(p[i], NODE):
+            p_ = NODE()
+            p_.parse = p[i]
+            p[i] = p_
+    p[0].parse = p[1].parse
+    p[0].data = setData(p, 1)
 
 
 def p_struct_or_union_specifier(p):
     '''struct_or_union_specifier : struct_or_union ID BLOCK_OPENER push_scope struct_declaration_list pop_scope BLOCK_CLOSER
-                                 | struct_or_union BLOCK_OPENER struct_declaration_list BLOCK_CLOSER
                                  | struct_or_union ID'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
@@ -1378,11 +1433,16 @@ def p_struct_or_union_specifier(p):
         p[0].data = {"type": p[2].data, "class": p[1].data}
         p[0].data["members_scope"] = p[5].scope
         p[0].data["size"] = getOffset()
-        res = pushEntry(p[2].data, p[0].data)
+        res, scp = pushEntry(p[2].data, p[0].data)
         if(res == False):
             print("Error at line : " + str(p.lineno(0)) +
                   " :: " + "Redefinition of struct variable")
             exit()
+
+        for code in p[4].code:
+            if(len(code)) > 0:
+                code[0] = p[0].data["type"] + ":" + code[0]
+            p[0].code = p[0].code + code
         popOffset()
     elif(len(p) == 5):
         # t = add_to_tree([None, p[3]], "members_list")
@@ -1425,11 +1485,15 @@ def p_struct_declaration_list(p):
     if(len(p) == 2):
         # p[0].parse = [p[1].parse]
         p[0].data = [setData(p, 1)]
+
+        p[0].code = [ p[1].code.copy() ]
     else:
         # p[0].parse = p[1].parse
         # p[0].parse.append(p[2].parse)
         p[0].data = setData(p, 1)
         p[0].data.append(setData(p, 2))
+
+        p[0].code = [ p[1].code.copy() ] + p[2].code
     p[0].scope = currentScopeId
 
 
@@ -1441,23 +1505,48 @@ def p_struct_declaration(p):
             p_.parse = p[i]
             p[i] = p_
     # p[0].parse = [p[1].parse, p[2].parse]
-
     for decl in p[2].data:
         data = setData(p, 1)
-        if(data["type"] == "void"):
-            print("Error at line : " + str(p.lineno(0)) +
-                  " :: " + "Can not declare void type variable")
+        if(data["type"] == "void" or data["type"][:-1] == "void"):
+            print("Error at line : " + str(p.lineno(0)) + " :: " +
+                  data["name"] + " | Can not declare void type variable")
             exit()
+        if(decl["type"] != ""):
+            data["type"] = data["type"] + decl["type"]
         data["name"] = decl["name"]
-        # data["meta"] = decl["meta"]
-        data["size"] = getSize(data["type"])
-        data["offset"] = getOffset()
-        addToOffset(data["size"])
-        res = pushEntry(decl["name"], data)
-        if(res == False):
-            print("Error at line : " + str(p.lineno(0)) +
-                  " :: " + "Redeclaration of variable")
-            exit()
+        data["meta"] = decl["meta"]
+
+        if len(data["meta"]) != 0:
+            data["is_array"] = 1
+            data["element_type"] = data["type"][:-1]
+            data["index"] = 1
+            data["to_add"] = "0"
+
+            arr_size = 1
+            for n in data["meta"]:
+                arr_size = arr_size * n
+
+            data["size"] = getSize(data["element_type"]) * arr_size
+            addToOffset(data["size"])
+            data["offset"] = getOffset()
+            data["base"] = "rbp"
+                
+            res = pushEntry(decl["name"], data)
+            if(res == False):
+                addToOffset(-data["size"])
+                print("Error at line : " + str(p.lineno(0)) + " :: " +
+                    decl["name"] + " | Redeclaration of variable")
+                exit()
+        else:   
+            data["size"] = getSize(data["type"])
+            addToOffset(data["size"])
+            data["offset"] = getOffset()
+            data["base"] = "rbp"
+            res = pushEntry(decl["name"], data)
+            if(res == False):
+                print("Error at line : " + str(p.lineno(0)) + " :: " +
+                    decl["name"] + " | Redeclaration of variable")
+                exit()
 
 
 def p_specifier_qualifier_list(p):
@@ -1495,9 +1584,7 @@ def p_struct_declarator_list(p):
 
 
 def p_struct_declarator(p):
-    '''struct_declarator : declarator
-                         | COLON constant_expression
-                         | declarator COLON constant_expression'''
+    '''struct_declarator : declarator'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -1528,10 +1615,9 @@ def p_declarator(p):
 def p_direct_decalarator(p):
     '''direct_declarator : ID
                          | L_PAREN declarator R_PAREN
-                         | direct_declarator L_SQBR constant_expression R_SQBR
+                         | direct_declarator L_SQBR INT_CONSTANT R_SQBR
                          | direct_declarator L_SQBR R_SQBR
                          | direct_declarator L_PAREN f_push_scope parameter_type_list R_PAREN
-                         | direct_declarator L_PAREN identifier_list R_PAREN
                          | direct_declarator L_PAREN f_push_scope R_PAREN'''
     global currentScopeId
     for i in range(len(p)):
@@ -1545,6 +1631,7 @@ def p_direct_decalarator(p):
         p[0].parse = p[1].parse
         p[0].data = {"name": setData(p, 1), "type": "", "meta": []}
     elif(p[2].parse == '('):
+        p[0].parse = [[p[0].parse], p[1].parse + "()"]
         function_name = p[1].data["name"]
         p[0].data = {
             "name": function_name,
@@ -1572,7 +1659,7 @@ def p_direct_decalarator(p):
             print("Error at line : " + str(p.lineno(0)) +
                   " :: " + "Redeclaration of function name")
             exit()
-        p[0].parse = [[p[0].parse], p[1].parse + "()"]
+        
     else:
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
@@ -1581,6 +1668,7 @@ def p_direct_decalarator(p):
                   " :: " + "Can not declare void type array")
             exit()
         p[0].data["type"] = p[1].data["type"] + '*'
+        p[0].data["meta"] = p[1].data["meta"] + [p[3].data] if len(p) == 5 else [1]
 
 
 def p_pointer(p):
@@ -1596,6 +1684,10 @@ def p_pointer(p):
     if(len(p) == 2):
         p[0].parse = [p[1].parse]
         p[0].data = setData(p, 1)
+    else:
+        p[0].parse = p[2].parse
+        p[0].parse.insert(0, p[1].parse)
+        p[0].data = p[1].data + p[2].data
     # elif(len(p) == 3 and (p[2].parse == 'const' or p[2].parse == 'volatile')):
     #     p[0].parse = [p[1].parse, p[2].parse]
     # elif(len(p) == 3):
@@ -1663,21 +1755,6 @@ def p_parameter_declaration(p):
     p[0].data = data
 
 
-def p_identifier_list(p):
-    '''identifier_list : ID
-                       | identifier_list COMMA ID'''
-    for i in range(len(p)):
-        if not isinstance(p[i], NODE):
-            p_ = NODE()
-            p_.parse = p[i]
-            p[i] = p_
-    if(len(p) == 2):
-        p[0].parse = [p[1].parse]
-    else:
-        p[0].parse = p[1].parse
-        p[0].parse.append(p[3].parse)
-
-
 def p_type_name(p):
     '''type_name : specifier_qualifier_list
                  | specifier_qualifier_list pointer'''
@@ -1690,12 +1767,13 @@ def p_type_name(p):
     p[0].data = setData(p, 1)
     if(len(p) == 3):
         p[0].data["type"] += p[2].data["type"]
+        p[0].data["meta"] = p[2].data["meta"]
+    else:
+        p[0].data["meta"] = []
 
 
 def p_initializer(p):
-    '''initializer : assignment_expression
-                   | BLOCK_OPENER initializer_list BLOCK_CLOSER
-                   | BLOCK_OPENER initializer_list COMMA BLOCK_CLOSER'''
+    '''initializer : assignment_expression'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -1705,19 +1783,19 @@ def p_initializer(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
 
-        p[0].place=p[1].place
-        p[0].code=p[1].code.copy()
-    else:
-        p[0].parse = '{' + str(p[2].parse)[1:-1] + '}'
-        p[0].data = {}
-        init_type = p[2].data[0]["type"]
-        for init in p[2].data:
-            if not isCompatible(init["type"], init_type):
-                print("Error at line : " + str(p.lineno(0)) +
-                      " :: " + "Incompatible type initialisation")
-                exit()
-            # init_type = type_cast(init_type, init["type"])["type"]
-        p[0].data["type"] = init_type
+        p[0].place = p[1].place
+        p[0].code = p[1].code.copy()
+    # else:
+    #     p[0].parse = '{' + str(p[2].parse)[1:-1] + '}'
+    #     p[0].data = {}
+    #     init_type = p[2].data[0]["type"]
+    #     for init in p[2].data:
+    #         if not isCompatible(init["type"], init_type):
+    #             print("Error at line : " + str(p.lineno(0)) +
+    #                   " :: " + "Incompatible type initialisation")
+    #             exit()
+    #         # init_type = type_cast(init_type, init["type"])["type"]
+    #     p[0].data["type"] = init_type
 
 
 def p_initializer_list(p):
@@ -1731,11 +1809,17 @@ def p_initializer_list(p):
     if(len(p) == 2):
         p[0].parse = [p[1].parse]
         p[0].data = [setData(p, 1)]
+
+        p[0].place = p[1].place
+        p[0].code = p[1].code.copy()
     else:
         p[0].parse = p[1].parse
         p[0].parse.append(p[3].parse)
         p[0].data = setData(p, 1)
         p[0].data.append(setData(p, 3))
+
+        p[0].place = p[1].place
+        p[0].code = p[1].code + p[3].code
 
 
 def p_statement(p):
@@ -1754,12 +1838,12 @@ def p_statement(p):
         p[0].parse = p[1].parse
         p[0].data = setData(p, 1)
         p[0].place = p[1].place
-        p[0].code = p[1].code
+        p[0].code = p[1].code.copy()
     else:
         p[0].parse = p[2].parse
         p[0].data = setData(p, 2)
         p[0].place = p[2].place
-        p[0].code = p[2].code
+        p[0].code = p[2].code.copy()
 
 
 def p_labeled_statement(p):
@@ -1813,7 +1897,7 @@ def p_compound_statement(p):
         p[0].parse = [p[2].parse]
         p[0].data = setData(p, 2)
         p[0].place = p[2].place
-        p[0].code = p[2].code
+        p[0].code = p[2].code.copy()
     elif(len(p) == 5):
         p[0].parse = [p[2].parse, p[3].parse]
         p[0].data = setData(p, 3)
@@ -1832,11 +1916,13 @@ def p_declaration_list(p):
     if(len(p) == 2):
         p[0].parse = [p[1].parse]
         p[0].data = [setData(p, 1)]
+        p[0].code = p[1].code.copy()
     else:
         p[0].parse = p[1].parse
         p[0].parse.append(p[2].parse)
         p[0].data = setData(p, 1)
         p[0].data.append(setData(p, 2))
+        p[0].code = p[1].code + p[2].code
 
 
 def p_statement_list(p):
@@ -1854,7 +1940,7 @@ def p_statement_list(p):
         if isinstance(p[1].code, dict):
             p[0].code = [p[1].code.copy()]
         else:
-            p[0].code = p[1].code
+            p[0].code = p[1].code.copy()
     else:
         p[0].parse = p[1].parse
         p[0].parse.append(p[2].parse)
@@ -1984,7 +2070,7 @@ def p_selection_statement_2(p):
         tmp2 = getNewTmp("int")
         caselist = caselist + [quad("=", [tmp1, str(val), ""], tmp1+" = "+str(val))] + [quad("-", [tmp2, test, tmp1], tmp2 +
                                                                                              " = "+test+" - "+tmp1), quad("ifz", [tmp2, p[5].code[idx]["label"], ""], "ifz "+tmp2+" goto->"+p[5].code[idx]["label"])]
-    caselist = caselist + \
+    caselist = caselist + 
         [quad("goto", [default_label], "goto->" + default_label)]
     for idx, code in enumerate(p[5].code):
         tmp_code = code["statement"]
@@ -2130,7 +2216,7 @@ def p_jump_statement(p):
     else:
         p[0].parse = add_to_tree([p[0], p[2]], p[1].parse)
         p[0].data["ret_type"] = p[2].data["type"]
-        p[0].code = p[2].code + \
+        p[0].code = p[2].code + 
             [quad("return", [p[2].place, "", ""], "return "+p[2].place)]
 
 
@@ -2272,6 +2358,9 @@ def main():
     f1.write("SCOPE ID : PARENT ID\n")
     for i in range(len(scopeTables)):
         f1.write("\t" + str(i) + "\t\t" + str(scopeTables[i].parent) + "\n")
+
+    f2 = open("symTab.obj", "wb")
+    pickle.dump(scopeTableList,f2)
 
 
 if '__main__' == __name__:
