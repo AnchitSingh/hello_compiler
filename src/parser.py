@@ -102,6 +102,7 @@ currentScopeId = 0
 labels = {}
 tmpId = 0
 
+gblCount = 0
 globalScopeTable = SymbolTable()
 scopeTables.append(globalScopeTable)
 offsets = [0]
@@ -136,6 +137,14 @@ def getParentScope(scopeId):
 def pushEntry(identifier, data, scope=None):
     global scopeTables
     global currentScopeId
+    global gblCount
+
+    if isinstance(identifier, dict) and currentScopeId == 0 and "size" in identifier.keys() and "offset" in identifier.keys() and "base" in identifier.keys():
+        identifier["offset"] = "gbl@" + str(gblCount)
+        gblCount = gblCount + 1
+
+    if isinstance(identifier, dict) and "base" in identifier.keys():
+        identifier["base"] = str(identifier["base"])
 
     if scope is None:
         scope = currentScopeId
@@ -236,14 +245,14 @@ def getNewLabel(s="label"):
 
 def getNewTmp(type_, offset=None, size=None, base="rbp"):
     global tmpId
-    tmp = "tmp_" + str(tmpId)
+    tmp = "tmp@" + str(tmpId)
     tmpId = tmpId + 1
 
     if offset == None:
         addToOffset(getSize(type_))
         offset = getOffset()
 
-    data = {"type":  type_, "class": "tmp", "size": size,
+    data = {"type": type_, "class": "tmp", "size": size,
             "offset": offset, "base": str(base)}
     pushEntry(tmp, data)
 
@@ -423,14 +432,18 @@ def p_postfix_expression(p):
     elif(len(p) == 3):
         p[0].parse = [p[1].parse, p[2].parse]
         allowed_type = ["char", "int", "float"]
-        if p[1].data["type"] not in allowed_type or p[1].data["type"][-1] != '*':
-            print("Error at line : " + str(p.lineno(0)) + " :: " +
-                  p[1].data["name"] + " | Type not compatible with increment/decrement operation")
-            exit()
+        
+        if p[1].data["type"] not in allowed_type:
+            if p[1].data["type"][-1] == '*':
+                pass
+            else:
+                print("Error at line : " + str(p.lineno(0)) + " :: " +
+                    p[1].data["name"] + " | Type not compatible with increment/decrement operation")
+                exit()
         p[0].data["type"] = p[1].data["type"]
         p[0].data["class"] = "basic"
 
-        p[0].place = p[1].place
+        p[0].place = getNewTmp(p[0].data["type"])
         p[0].code = p[1].code + [quad("=", [p[0].place, p[1].place], p[0].place + " = " + p[1].place)] + [
             quad(p[2].parse, [p[1].place], p[1].place + p[2].parse)]
 
@@ -467,8 +480,7 @@ def p_postfix_expression(p):
             (base, op) = (
                 "rbp", "-") if str(res__["base"]) == "rbp" else ("0", "+")
             p[0].place = getNewTmp(res_["type"], tmpvar, res_["size"], base)
-            p[0].code = p[1].code + 
-                [quad(op, [tmpvar, res__["offset"], res__["size"] - res_["offset"]])]
+            p[0].code = p[1].code + [quad(op, [tmpvar, res__["offset"], res__["size"] - res_["offset"]])]
             p[0].data["offset"] = tmpvar
             p[0].data["base"] = base
         else:
@@ -486,12 +498,15 @@ def p_postfix_expression(p):
 
             tmpvar = getNewTmp("int*")
             p[0].place = getNewTmp(res_["type"], tmpvar, res_["size"], "0")
-            p[0].code = p[1].code + 
-                [quad("+", [tmpvar, p[1].place, res["size"] - res_["offset"]])]
+            p[0].code = p[1].code + [quad("+", [tmpvar, p[1].place, res["size"] - res_["offset"]])]
             p[0].data["offset"] = tmpvar
             p[0].data["base"] = "0"
     elif(p[3].parse == ')'):
         p[0].parse = add_to_tree([p[0]], p[1].parse + "()")
+        if p[1].data["type"] != "function":
+            print("Error at line : " + str(p.lineno(0)) + " :: " +
+                  p[1].data["name"] + " | Variable is not a function type")
+            exit()
         res, scp = checkEntry(p[1].data["name"], 0)
         if(res == False):
             print("Error at line : " + str(p.lineno(0)) + " :: " +
@@ -499,8 +514,15 @@ def p_postfix_expression(p):
             exit()
         p[1].data = res
         p[0].data["type"] = p[1].data["ret_type"]
+        
+        p[0].place = getNewTmp(p[0].data["type"])
+        p[0].code = p[1].code + [ quad("Fcall",[p[0].place, res["label"], ""], p[0].place + " = " + "Fcall " + res["name"]) ] + [ quad("removeParams", [ str(res["parameter_space"]),"", ""], "RemoveParams " + str(res["parameter_space"]) ) ]
     elif(p[4].parse == ')'):
         p[0].parse = add_to_tree([p[0], p[3]], p[1].parse + "()")
+        if p[1].data["type"] != "function":
+            print("Error at line : " + str(p.lineno(0)) + " :: " +
+                  p[1].data["name"] + " | Variable is not a function type")
+            exit()
         res, scp = checkEntry(p[1].data["name"], 0)
         if(res == False):
             print("Error at line : " + str(p.lineno(0)) + " :: " +
@@ -521,6 +543,13 @@ def p_postfix_expression(p):
                       p[1].data["name"] + " | Type mismatch in function arguments")
                 exit()
         p[0].data["type"] = p[1].data["ret_type"]
+
+        tmp_code = [ ]
+        for arg in p[3].place:
+            tmp_code.append( quad("PushParam", [arg, "", ""], "PushParam " + arg) )
+
+        p[0].place = getNewTmp(p[0].data["type"])
+        p[0].code = p[1].code + p[3].code + tmp_code + [ quad("Fcall", [p[0].place, res["label"], ""], p[0].place + " = " + "Fcall " + res["name"]) ] + [ quad("removeParams", [ str(res["parameter_space"]),"", ""], "RemoveParams " + str(res["parameter_space"]) ) ]
 
 
 def p_argument_expression_list(p):
@@ -582,9 +611,7 @@ def p_unary_expression(p):
 
         res, scp = checkEntry(p[2].place)
         p[0].place = getNewTmp("int")
-        p[0].code = p[2].code + 
-            [quad("=", [p[0].place, str(res["size"]), ""],
-                  p[0].place+"= "+str(res["size"]))]
+        p[0].code = p[2].code + [quad("=", [p[0].place, str(res["size"]), ""], p[0].place+"= "+str(res["size"]))]
     else:
         p[0].parse = add_to_tree([p[0], p[2]], p[1].parse)
         p[0].data = setData(p, 2)
@@ -592,9 +619,7 @@ def p_unary_expression(p):
             p[0].data["type"] = p[2].data["type"] + '*'
 
             p[0].place = getNewTmp(p[0].data["type"])
-            p[0].code = p[2].code + 
-                [quad("lea", [p[0].place, p[2].place],
-                      p[0].place + " = & " + p[2].place)]
+            p[0].code = p[2].code + [quad("lea", [p[0].place, p[2].place], p[0].place + " = & " + p[2].place)]
         elif(p[1].data == '*'):
             if p[2].data["type"][-1] != '*':
                 print("Error at line : " + str(p.lineno(0)) + " :: " +
@@ -628,9 +653,7 @@ def p_unary_expression(p):
                 p[0].place = p[2].place
             else:
                 p[0].place = getNewTmp(p[2].data["type"])
-                p[0].code = p[2].code + 
-                    [quad("*", [p[0].place, "-1", p[2].place],
-                          p[0].place + " = " + " -1 * " + p[2].place)]
+                p[0].code = p[2].code + [quad("*", [p[0].place, "-1", p[2].place], p[0].place + " = " + " -1 * " + p[2].place)]
         else:
             allowed_type = ["char", "int", "float"]
             if p[2].data["type"] not in allowed_type or p[2].data["type"][-1] != '*':
@@ -640,8 +663,7 @@ def p_unary_expression(p):
             p[0].data["type"] = p[2].data["type"]
 
             p[0].place = p[2].place
-            p[0].code = p[2].code + 
-                [quad(p[1].parse, [p[2].place], p[2].place + p[1].parse)]
+            p[0].code = p[2].code + [quad(p[1].parse, [p[2].place], p[2].place + p[1].parse)]
 
 
 def p_unary_operator(p):
@@ -1253,9 +1275,9 @@ def p_constant_expression(p):
 
 def p_declaration(p):
     '''declaration : declaration_specifiers STMT_TERMINATOR
-                   | declaration_specifiers init_declarator_list STMT_TERMINATOR'''
+                   | declaration_specifiers init_declarator_list STMT_TERMINATOR
+                   | declaration_specifiers declarator L_PAREN f_push_scope parameter_type_list R_PAREN pop_scope STMT_TERMINATOR'''
     global currentScopeId
-    
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -1268,19 +1290,22 @@ def p_declaration(p):
             if(t[0] == '='):
                 p[0].parse.append(t)
 
+        p[0].code = p[2].code.copy()
         for decl in p[2].data:
             data = setData(p, 1)
             if(data["type"] == "void" or data["type"][:-1] == "void"):
                 print("Error at line : " + str(p.lineno(0)) + " :: " +
                       data["name"] + " | Can not declare void type variable")
                 exit()
+
             if("init_type" in decl.keys()):
                 if not isCompatible(decl["init_type"], data["type"]) or (data["type"][-1] == '*' and not isCompatible(decl["init_type"], data["type"][:-1])):
                     print("Error at line : " + str(p.lineno(0)) +
                           " :: " + "Incompatible type initialisation")
                     exit()
             data["name"] = decl["name"]
-            data["meta"] = decl["meta"]
+            if "meta" in decl.keys():
+                data["meta"] = decl["meta"]
 
             if len(data["meta"]) != 0:
                 data["is_array"] = 1
@@ -1323,10 +1348,12 @@ def p_declaration(p):
 
                 if "init_type" in decl.keys():
                     tmp_code = [ quad("=",[ decl["name"]+"@"+str(currentScopeId) , decl["place"] ] ) ]
-                    p[0].code = p[0].code + code
-    else:
+                    p[0].code = p[0].code + tmp_code
+    elif len(p) == 3:
         p[0].parse = p[1].parse
         p[0].code = p[1].code.copy()
+    else:
+        popOffset()
 
 
 def p_declaration_specifiers(p):
@@ -1616,10 +1643,9 @@ def p_direct_decalarator(p):
     '''direct_declarator : ID
                          | L_PAREN declarator R_PAREN
                          | direct_declarator L_SQBR INT_CONSTANT R_SQBR
-                         | direct_declarator L_SQBR R_SQBR
-                         | direct_declarator L_PAREN f_push_scope parameter_type_list R_PAREN
-                         | direct_declarator L_PAREN f_push_scope R_PAREN'''
+                         | direct_declarator L_SQBR R_SQBR'''
     global currentScopeId
+    
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -1629,36 +1655,45 @@ def p_direct_decalarator(p):
             p[i] = p_
     if(len(p) == 2):
         p[0].parse = p[1].parse
-        p[0].data = {"name": setData(p, 1), "type": "", "meta": []}
-    elif(p[2].parse == '('):
-        p[0].parse = [[p[0].parse], p[1].parse + "()"]
-        function_name = p[1].data["name"]
-        p[0].data = {
-            "name": function_name,
-            "ret_type": None,
-            "input_type": None,
-            "func_scope": currentScopeId,
-            "func_offset": getOffset()
-        }
-        if(p[3] == ')'):
-            # p[0].parse = [[p[0].parse], p[1].parse + "()"]
-            pass
-        else:
-            # t = add_to_tree([None, p[3]], "parameters")
-            # p[0].parse = [[p[0].parse, t], p[1].parse + "()"]
-            input_type = ""
-            for arg in p[4].data:
-                input_type = input_type + ',' + arg["type"]
-            p[0].data["input_type"] = input_type
-        parent = getParentScope(currentScopeId)
-        res, scp = checkEntry(function_name, parent)
-        if(res == False):
-            pushEntry(function_name, {
-                      "type": "function", "class": "function", **(p[0].data)}, scope=parent)
-        else:
-            print("Error at line : " + str(p.lineno(0)) +
-                  " :: " + "Redeclaration of function name")
+
+        res, scp = checkEntry(p[1].data, currentScopeId)
+        if(res != False):
+            print("Error at line : " + str(p.lineno(1)) + " :: " +
+                  p[1].data + " | Identifier is already declared in same scope")
             exit()
+        p[0].data = {"name": setData(p, 1), "type": "", "meta": []}
+
+        p[0].place = p[1].data + "@" + str(scp)
+        p[0].code = [""]
+    # elif(p[2].parse == '('):
+    #     p[0].parse = [[p[0].parse], p[1].parse + "()"]
+    #     function_name = p[1].data["name"]
+    #     p[0].data = {
+    #         "name": function_name,
+    #         "ret_type": "",
+    #         "input_type": "",
+    #         "func_scope": currentScopeId,
+    #         "func_offset": getOffset()
+    #     }
+    #     if(p[3] == ')'):
+    #         # p[0].parse = [[p[0].parse], p[1].parse + "()"]
+    #         pass
+    #     else:
+    #         # t = add_to_tree([None, p[3]], "parameters")
+    #         # p[0].parse = [[p[0].parse, t], p[1].parse + "()"]
+    #         input_type = ""
+    #         for arg in p[4].data:
+    #             input_type = input_type + ',' + arg["type"]
+    #         p[0].data["input_type"] = input_type
+    #     parent = getParentScope(currentScopeId)
+    #     res, scp = checkEntry(function_name, parent)
+    #     if(res == False):
+    #         pushEntry(function_name, {
+    #                   "type": "function", "class": "function", **(p[0].data)}, scope=parent)
+    #     else:
+    #         print("Error at line : " + str(p.lineno(0)) +
+    #               " :: " + "Redeclaration of function name")
+    #         exit()
         
     else:
         p[0].parse = p[1].parse
@@ -1701,14 +1736,72 @@ def p_pointer(p):
 
 def p_parameter_type_list(p):
     '''parameter_type_list : parameter_list
-                           | parameter_list COMMA ELLIPSIS'''
+                           | '''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
             p_.parse = p[i]
             p[i] = p_
-    p[0].parse = p[1].parse
-    p[0].data = setData(p, 1)
+    if(len(p) == 2):
+        p[0].parse = p[1].parse
+
+    f_name = p[-3].data["name"]
+    
+    ret_type = p[-4].data["type"] + p[-3].data["type"]
+
+    offset = - 8
+
+    input_type = ""
+    if len(p)==2:
+        for arg in p[1].data:
+            input_type = input_type + ',' + arg["type"]
+            
+            if "is_array" in arg.keys():    
+                updateEntry(arg["name"], arg)
+                array_addr_temp = getNewTmp("int", offset, 4)
+                offset = offset - 4
+                arg["offset"] = array_addr_temp
+                arg["base"] = "0"
+            else:
+                arg["offset"] = offset
+                offset = offset - arg["size"]
+                updateEntry(arg["name"], arg)
+    parent = getParentScope(currentScopeId)
+    res, scp = checkEntry(f_name, parent)
+    if res == False:
+        if f_name == "main":
+            label = "main"
+        else:
+            label = getNewLabel("func")
+    else:
+        label = checkEntry(f_name, parent)[0]["label"]
+
+    p[0].data = {
+        "name" : f_name,
+        "type" : "function",
+        "class" : "function",
+        "ret_type" : ret_type,
+        "input_type" : input_type,
+        "label" : label,
+        "func_scope" : currentScopeId,
+        "declaration": True,
+        "stack_space" : getOffset(),
+        "parameter_space": (-offset - 8),
+        "saved_register_space" : 40 , # r12 - r15 and rbx
+        "return_offset" : 4,
+        "rbp_offset" : 0,
+    }
+
+    scopeTables[currentScopeId].type_ = "function"
+    func_sig = f_name
+
+    res, scp = checkEntry(f_name, parent)
+    if res is False:
+        # this function is not seen 
+        pushEntry(func_sig, p[0].data, scope = parent)
+    else:
+        # this name is seen but may be overloaded
+        pass
 
 
 def p_parameter_list(p):
@@ -1739,19 +1832,44 @@ def p_parameter_declaration(p):
     p[0].parse = list(toParse(p[1:]))
     decl = setData(p, 2)
     data = setData(p, 1)
-    if(data["type"] == "void"):
-        print("Error at line : " + str(p.lineno(0)) + " :: " +
-              "Can not declare void type variable in parameter")
-        exit()
     if(decl["type"] == '*'):
         data["type"] = data["type"] + '*'
     data["name"] = decl["name"]
     data["meta"] = decl["meta"]
-    res = pushEntry(decl["name"], data)
-    if(res == False):
-        print("Error at line : " + str(p.lineno(0)) +
-              " :: " + "Redeclaration of variable")
-        exit()
+    if len(data["meta"]) != 0:
+        data["is_array"] = 1
+        data["element_type"] = data["type"][:-1]
+        data["index"] = 1
+        data["to_add"] = "0"
+
+        arr_size = 1
+        for n in data["meta"]:
+            arr_size = arr_size * n
+
+        data["size"] = getSize(data["element_type"]) * arr_size
+        addToOffset(data["size"])
+        data["offset"] = getOffset()
+        data["base"] = "rbp"
+        
+        res = pushEntry(decl["name"], data)
+        if(res == False):
+            addToOffset(-data["size"])
+            print("Error at line : " + str(p.lineno(0)) + " :: " +
+                decl["name"] + " | Redeclaration of variable")
+            exit()
+    else:
+        if(data["type"] == "void"):
+            print("Error at line : " + str(p.lineno(0)) + " :: " +
+                "Can not declare void type variable in parameter")
+            exit()
+        
+        data["size"] = getSize(data["type"])
+        data["base"] = "rbp"
+        res = pushEntry(decl["name"], data)
+        if(res == False):
+            print("Error at line : " + str(p.lineno(0)) +
+                " :: " + "Redeclaration of variable")
+            exit()
     p[0].data = data
 
 
@@ -1824,7 +1942,7 @@ def p_initializer_list(p):
 
 def p_statement(p):
     '''statement : labeled_statement
-                 | push_scope compound_statement pop_scope
+                 | compound_statement
                  | expression_statement
                  | selection_statement
                  | iteration_statement
@@ -1839,11 +1957,11 @@ def p_statement(p):
         p[0].data = setData(p, 1)
         p[0].place = p[1].place
         p[0].code = p[1].code.copy()
-    else:
-        p[0].parse = p[2].parse
-        p[0].data = setData(p, 2)
-        p[0].place = p[2].place
-        p[0].code = p[2].code.copy()
+    # else:
+    #     p[0].parse = p[2].parse
+    #     p[0].data = setData(p, 2)
+    #     p[0].place = p[2].place
+    #     p[0].code = p[2].code.copy()
 
 
 def p_labeled_statement(p):
@@ -1866,7 +1984,7 @@ def p_labeled_statement(p):
             "statement": p[4].code,
             "label": label
         }
-    elif(p[1] == 'default'):
+    elif(p[1].parse == 'default'):
         p[0].parse = add_to_tree([p[0], p[3]], p[1].parse)
         p[0].data = setData(p, 3)
         p[0].code = {
@@ -1980,110 +2098,108 @@ def p_expression_statement(p):
 
 
 def p_selection_statement_0(p):
-    '''selection_statement : IF L_PAREN expression R_PAREN statement'''
+    '''selection_statement : IF push_scope L_PAREN expression R_PAREN statement pop_scope'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
             p_.parse = p[i]
-            if(i in [1, 2, 4, 6]):
+            if(i in [1, 3, 5]):
                 p_.data = p[i]
             p[i] = p_
-    t1 = add_to_tree([None, p[3]], "condition")
-    t2 = add_to_tree([None, p[5]], "body")
+    t1 = add_to_tree([None, p[4]], "condition")
+    t2 = add_to_tree([None, p[6]], "body")
     p[0].parse = add_to_tree([p[0], t1, t2], p[1].parse)
-    p[0].data = setData(p, 5)
+    p[0].data = setData(p, 6)
     p[0].after = getNewLabel("if_after")
-    p[0].code = p[3].code + [quad("ifz", [p[3].place, p[0].after, p[3].place, p[0].after, ""], "ifz " +
-                                  p[3].place + " goto->" + p[0].after)] + p[5].code + [quad("label", [p[0].after], p[0].after + " : ")]
+    p[0].code = p[4].code + [quad("ifz", [p[4].place, p[0].after, p[4].place, p[0].after, ""], "ifz " +
+                                  p[4].place + " goto->" + p[0].after)] + p[6].code + [quad("label", [p[0].after], p[0].after + " : ")]
 
 
 def p_selection_statement_1(p):
-    '''selection_statement : IF L_PAREN expression R_PAREN statement ELSE statement'''
+    '''selection_statement : IF push_scope L_PAREN expression R_PAREN statement pop_scope ELSE push_scope statement pop_scope'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
             p_.parse = p[i]
-            if(i in [1, 2, 4, 6]):
+            if(i in [1, 3, 5, 8]):
                 p_.data = p[i]
             p[i] = p_
-    t1 = add_to_tree([None, p[3]], "condition")
-    t2 = add_to_tree([None, p[5]], "body")
-    t3 = add_to_tree([None, p[7]], "else-body")
-    p[0].parse = add_to_tree([p[0], t1, t2, t3], p[1].parse + p[6].parse)
+    t1 = add_to_tree([None, p[4]], "condition")
+    t2 = add_to_tree([None, p[6]], "body")
+    t3 = add_to_tree([None, p[10]], "else-body")
+    p[0].parse = add_to_tree([p[0], t1, t2, t3], p[1].parse + p[8].parse)
     p[0].data = {}
-    if "ret_type" in p[5].data.keys():
-        if "ret_type" in p[7].data.keys() and p[5].data["ret_type"] == p[7].data["ret_type"]:
+    if "ret_type" in p[6].data.keys():
+        if "ret_type" in p[10].data.keys() and p[6].data["ret_type"] == p[10].data["ret_type"]:
             print("Error at line : " + str(p.lineno(0)) +
                   " :: " + "Return type mismatch")
             exit()
         else:
-            p[0].data["ret_type"] = p[5].data["ret_type"]
-    elif "ret_type" in p[7].data.keys():
-        p[0].data["ret_type"] = p[7].data["ret_type"]
+            p[0].data["ret_type"] = p[6].data["ret_type"]
+    elif "ret_type" in p[10].data.keys():
+        p[0].data["ret_type"] = p[10].data["ret_type"]
 
     p[0].if_ = getNewLabel("if_part")
     p[0].else_ = getNewLabel("else_part")
     p[0].after = getNewLabel("if_after")
 
-    tmp_code = [quad("ifz", [p[3].place,  p[0].else_, ""], "ifz " + p[3].place + " goto->" +
-                     p[0].else_)] + p[5].code + [quad("goto", [p[0].after, "", ""], "goto->" + p[0].after)]
-    p[0].code = p[3].code + [quad("label", [p[0].if_, "", ""], p[0].if_ + ":")] + ["    " + i for i in tmp_code] + [quad("label", [
-        p[0].else_, "", ""], p[0].else_ + ":")] + ["    " + i for i in p[7].code] + [quad("label", [p[0].after, "", ""], p[0].after + ":")]
+    tmp_code = [quad("ifz", [p[4].place,  p[0].else_, ""], "ifz " + p[4].place + " goto->" +
+                     p[0].else_)] + p[6].code + [quad("goto", [p[0].after, "", ""], "goto->" + p[0].after)]
+    p[0].code = p[4].code + [quad("label", [p[0].if_, "", ""], p[0].if_ + ":")] + ["    " + i for i in tmp_code] + [quad("label", [
+        p[0].else_, "", ""], p[0].else_ + ":")] + ["    " + i for i in p[10].code] + [quad("label", [p[0].after, "", ""], p[0].after + ":")]
 
 
 def p_selection_statement_2(p):
-    '''selection_statement : SWITCH L_PAREN expression R_PAREN statement'''
+    '''selection_statement : SWITCH push_scope L_PAREN expression R_PAREN statement pop_scope'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
             p_.parse = p[i]
-            if(i in [1, 2, 4, 6]):
+            if(i in [1, 3, 5]):
                 p_.data = p[i]
             p[i] = p_
 
-    t1 = add_to_tree([None, p[3]], "condition")
-    t2 = add_to_tree([None, p[5]], "body")
+    t1 = add_to_tree([None, p[4]], "condition")
+    t2 = add_to_tree([None, p[6]], "body")
     p[0].parse = add_to_tree([p[0], t1, t2], p[1].parse)
     allowed_type = ["char", "int"]
-    if p[3].data["type"] not in allowed_type:
+    if p[4].data["type"] not in allowed_type:
         print("Error at line : " + str(p.lineno(0)) + " :: " +
               "Type not compatible with switch condition")
         exit()
-    if len(set([c["value"] for c in p[5].code])) != len(p[5].code):
+    if len(set([c["value"] for c in p[6].code])) != len(p[6].code):
         print("Error at line : " + str(p.lineno(0)) + " :: " +
               "Same value is used more than one time in cases")
         exit()
-    p[0].data = setData(p, 5)
+    p[0].data = setData(p, 6)
 
     p[0].case = getNewLabel("switch_case")
     p[0].next = getNewLabel("switch_body")
     p[0].after = getNewLabel("switch_after")
     caselist = []
     nextlist = []
-    test = p[3].place
+    test = p[4].place
     default_label = p[0].after
-    for idx, val in enumerate([c["value"] for c in p[5].code]):
+    for idx, val in enumerate([c["value"] for c in p[6].code]):
         if val == None:
-            default_label = p[5].code[idx]["label"]
+            default_label = p[6].code[idx]["label"]
             continue
         tmp1 = getNewTmp("int")
         tmp2 = getNewTmp("int")
         caselist = caselist + [quad("=", [tmp1, str(val), ""], tmp1+" = "+str(val))] + [quad("-", [tmp2, test, tmp1], tmp2 +
-                                                                                             " = "+test+" - "+tmp1), quad("ifz", [tmp2, p[5].code[idx]["label"], ""], "ifz "+tmp2+" goto->"+p[5].code[idx]["label"])]
-    caselist = caselist + 
-        [quad("goto", [default_label], "goto->" + default_label)]
-    for idx, code in enumerate(p[5].code):
+                                                                                             " = "+test+" - "+tmp1), quad("ifz", [tmp2, p[6].code[idx]["label"], ""], "ifz "+tmp2+" goto->"+p[6].code[idx]["label"])]
+    caselist = caselist + [quad("goto", [default_label], "goto->" + default_label)]
+    for idx, code in enumerate(p[6].code):
         tmp_code = code["statement"]
         tmp_code = [quad("goto", [p[0].after], "goto->"+p[0].after)
                     if re.fullmatch('[ ]*break', i) else i for i in tmp_code]
-        nextlist = nextlist + [quad("label", [code["label"], "", ""], code["label"] + ":")] + [
-            "    " + i for i in tmp_code]
-    p[0].code = p[3].code + [quad("label", [p[0].case, "", ""], p[0].case + ":")] + ["    " + i for i in caselist] + [quad("label", [
+        nextlist = nextlist + [quad("label", [code["label"], "", ""], code["label"] + ":")] + ["    " + i for i in tmp_code]
+    p[0].code = p[4].code + [quad("label", [p[0].case, "", ""], p[0].case + ":")] + ["    " + i for i in caselist] + [quad("label", [
         p[0].next, "", ""], p[0].next + ":")] + ["    " + i for i in nextlist] + [quad("label", [p[0].after, "", ""], p[0].after + ":")]
 
 
 def p_iteration_statement_0(p):
-    '''iteration_statement : WHILE L_PAREN expression R_PAREN statement'''
+    '''iteration_statement : WHILE push_scope L_PAREN expression R_PAREN statement pop_scope'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -2091,15 +2207,15 @@ def p_iteration_statement_0(p):
             if(i == 1 or p[i] in ["while", '(', ')', ';']):
                 p_.data = p[i]
             p[i] = p_
-    t1 = add_to_tree([None, p[3]], "condition")
-    t2 = add_to_tree([None, p[5]], "body")
+    t1 = add_to_tree([None, p[4]], "condition")
+    t2 = add_to_tree([None, p[6]], "body")
     p[0].parse = add_to_tree([p[0], t1, t2], p[1].parse)
-    p[0].data = setData(p, 5)
+    p[0].data = setData(p, 6)
 
     p[0].begin = getNewLabel("while_body")
     p[0].after = getNewLabel("while_after")
-    tmp_code = p[3].code + [quad("ifz", [p[3].place, p[0].after], "ifz " + p[3].place +
-                                 " goto->" + p[0].after)] + p[5].code + [quad("goto", [p[0].begin], "goto->" + p[0].begin)]
+    tmp_code = p[4].code + [quad("ifz", [p[4].place, p[0].after], "ifz " + p[4].place +
+                                 " goto->" + p[0].after)] + p[6].code + [quad("goto", [p[0].begin], "goto->" + p[0].begin)]
     tmp_code = [quad("goto", [p[0].after], "goto->"+p[0].after)
                 if re.fullmatch('[ ]*break', i) else i for i in tmp_code]
     tmp_code = [quad("goto", [p[0].begin], "goto->"+p[0].begin)
@@ -2109,7 +2225,7 @@ def p_iteration_statement_0(p):
 
 
 def p_iteration_statement_1(p):
-    '''iteration_statement : DO statement WHILE L_PAREN expression R_PAREN STMT_TERMINATOR'''
+    '''iteration_statement : DO push_scope statement WHILE L_PAREN expression R_PAREN pop_scope STMT_TERMINATOR'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -2117,15 +2233,15 @@ def p_iteration_statement_1(p):
             if(i == 1 or p[i] in ["while", '(', ')', ';']):
                 p_.data = p[i]
             p[i] = p_
-    t1 = add_to_tree([None, p[5]], "condition")
-    t2 = add_to_tree([None, p[2]], "body")
-    p[0].parse = add_to_tree([p[0], t1, t2], p[1].parse + '-' + p[3].parse)
-    p[0].data = setData(p, 2)
+    t1 = add_to_tree([None, p[6]], "condition")
+    t2 = add_to_tree([None, p[3]], "body")
+    p[0].parse = add_to_tree([p[0], t1, t2], p[1].parse + '-' + p[4].parse)
+    p[0].data = setData(p, 3)
 
     p[0].begin = getNewLabel("do_body")
     p[0].after = getNewLabel("do_after")
-    tmp_code = p[2].code + p[5].code + [quad(
-        "ifnz", [p[5].place, p[0].begin, ""], "ifnz " + p[5].place + " goto->" + p[0].begin)]
+    tmp_code = p[3].code + p[6].code + [quad(
+        "ifnz", [p[6].place, p[0].begin, ""], "ifnz " + p[6].place + " goto->" + p[0].begin)]
     tmp_code = [quad("goto", [p[0].after], "goto->"+p[0].after)
                 if re.fullmatch('[ ]*break', i) else i for i in tmp_code]
     tmp_code = [quad("goto", [p[0].begin], "goto->"+p[0].begin)
@@ -2135,7 +2251,7 @@ def p_iteration_statement_1(p):
 
 
 def p_iteration_statement_2(p):
-    '''iteration_statement : FOR L_PAREN expression_statement expression_statement R_PAREN statement'''
+    '''iteration_statement : FOR push_scope L_PAREN expression_statement expression_statement R_PAREN statement pop_scope'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -2143,27 +2259,27 @@ def p_iteration_statement_2(p):
             if(i == 1 or p[i] in ["while", '(', ')', ';']):
                 p_.data = p[i]
             p[i] = p_
-    t1 = add_to_tree([None, p[3]], "initialisation")
-    t2 = add_to_tree([None, p[4]], "stop condition")
+    t1 = add_to_tree([None, p[4]], "initialisation")
+    t2 = add_to_tree([None, p[5]], "stop condition")
     t3 = add_to_tree([None, p[6]], "body")
     p[0].parse = add_to_tree([p[0], t1, t2, t3], p[1].parse)
-    p[0].data = setData(p, 6)
+    p[0].data = setData(p, 7)
 
     p[0].test = getNewLabel("for_test")
     p[0].body = p[0].test
     p[0].after = getNewLabel("for_after")
-    tmp_code = p[4].code + [quad("ifz", [p[4].place, p[0].after], "ifz " + p[4].place +
-                                 " goto->" + p[0].after)] + p[6].code + [quad("goto", [p[0].test], "goto->" + p[0].test)]
+    tmp_code = p[5].code + [quad("ifz", [p[5].place, p[0].after], "ifz " + p[5].place +
+                                 " goto->" + p[0].after)] + p[7].code + [quad("goto", [p[0].test], "goto->" + p[0].test)]
     tmp_code = [quad("goto", [p[0].after], "goto->"+p[0].after)
                 if re.fullmatch('[ ]*break', i) else i for i in tmp_code]
     tmp_code = [quad("goto", [p[0].body], "goto->"+p[0].body)
                 if re.fullmatch('[ ]*continue', i) else i for i in tmp_code]
-    p[0].code = p[3].code + [quad("label", [p[0].test, "", ""], p[0].test + " : ")] + [
+    p[0].code = p[4].code + [quad("label", [p[0].test, "", ""], p[0].test + " : ")] + [
         "    " + i for i in tmp_code] + [quad("label", [p[0].after], p[0].after + " : ")]
 
 
 def p_iteration_statement_3(p):
-    '''iteration_statement : FOR L_PAREN expression_statement expression_statement expression R_PAREN statement'''
+    '''iteration_statement : FOR push_scope L_PAREN expression_statement expression_statement expression R_PAREN statement pop_scope'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -2171,26 +2287,26 @@ def p_iteration_statement_3(p):
             if(i == 1 or p[i] in ["while", '(', ')', ';']):
                 p_.data = p[i]
             p[i] = p_
-    t1 = add_to_tree([None, p[3]], "initialisation")
-    t2 = add_to_tree([None, p[4]], "stop condition")
-    t3 = add_to_tree([None, p[5]], "update")
-    t4 = add_to_tree([None, p[7]], "body")
+    t1 = add_to_tree([None, p[4]], "initialisation")
+    t2 = add_to_tree([None, p[5]], "stop condition")
+    t3 = add_to_tree([None, p[6]], "update")
+    t4 = add_to_tree([None, p[8]], "body")
     p[0].parse = add_to_tree([p[0], t1, t2, t3, t4], p[1].parse)
-    p[0].data = setData(p, 7)
+    p[0].data = setData(p, 8)
 
     p[0].test = getNewLabel("for_test")
     p[0].body = getNewLabel("for_body")
     p[0].after = getNewLabel("for_after")
-    tmp_code = p[4].code + [quad("ifz", [p[4].place, p[0].after], "ifz " + p[4].place + " goto->" +
-                                 p[0].after)] + p[7].code + p[5].code + [quad("goto", [p[0].test], "goto->" + p[0].test)]
+    tmp_code = p[5].code + [quad("ifz", [p[5].place, p[0].after], "ifz " + p[5].place + " goto->" +
+                                 p[0].after)] + p[8].code + p[6].code + [quad("goto", [p[0].test], "goto->" + p[0].test)]
     tmp_code = [quad("goto", [p[0].after], "goto->"+p[0].after)
                 if re.fullmatch('[ ]*break', i) else i for i in tmp_code]
     tmp_code = [quad("goto", [p[0].body], "goto->"+p[0].body)
                 if re.fullmatch('[ ]*continue', i) else i for i in tmp_code]
-    p[0].code = p[3].code + [quad("label", [p[0].test, "", ""], p[0].test + " : ")] + ["    " + i for i in tmp_code[:len(
-        p[4].code + [quad("ifz", [p[4].place, p[0].after], "ifz " + p[4].place + " goto->" + p[0].after)] + p[7].code)]]
+    p[0].code = p[4].code + [quad("label", [p[0].test, "", ""], p[0].test + " : ")] + ["    " + i for i in tmp_code[:len(
+        p[5].code + [quad("ifz", [p[5].place, p[0].after], "ifz " + p[5].place + " goto->" + p[0].after)] + p[8].code)]]
     p[0].code = p[0].code + [quad("label", [p[0].body], p[0].body + " : ")] + ["    " + i for i in tmp_code[len(
-        p[4].code + [quad("ifz", [p[4].place, p[0].after], "ifz " + p[4].place + " goto->" + p[0].after)] + p[7].code):]]
+        p[4].code + [quad("ifz", [p[5].place, p[0].after], "ifz " + p[5].place + " goto->" + p[0].after)] + p[8].code):]]
     p[0].code = p[0].code + [quad("label", [p[0].after], p[0].after + " : ")]
 
 
@@ -2216,8 +2332,7 @@ def p_jump_statement(p):
     else:
         p[0].parse = add_to_tree([p[0], p[2]], p[1].parse)
         p[0].data["ret_type"] = p[2].data["type"]
-        p[0].code = p[2].code + 
-            [quad("return", [p[2].place, "", ""], "return "+p[2].place)]
+        p[0].code = p[2].code + [quad("return", [p[2].place, "", ""], "return "+p[2].place)]
 
 
 def p_translation_unit(p):
@@ -2234,7 +2349,7 @@ def p_translation_unit(p):
     else:
         p[0].parse = p[1].parse
         p[0].parse.append(p[2].parse)
-        p[0].code = p[1].code.copy()+p[2].code.copy()
+        p[0].code = p[1].code + p[2].code
 
 
 def p_external_declaration(p):
@@ -2250,7 +2365,7 @@ def p_external_declaration(p):
 
 
 def p_function_definition(p):
-    '''function_definition : declaration_specifiers declarator compound_statement pop_scope'''
+    '''function_definition : declaration_specifiers declarator L_PAREN f_push_scope parameter_type_list R_PAREN compound_statement pop_scope'''
     for i in range(len(p)):
         if not isinstance(p[i], NODE):
             p_ = NODE()
@@ -2271,19 +2386,21 @@ def p_function_definition(p):
     else:
         p[0].parse = add_to_tree([p[0], p[2].parse[-2:-1], t1], f_name)
 
-    if(p[1].data["type"] != "void" and ((not isinstance(p[3].data, list) and "ret_type" not in p[3].data.keys()) or isinstance(p[3].data, list))):
+    if(p[1].data["type"] != "void" and ((not isinstance(p[7].data, list) and "ret_type" not in p[7].data.keys()) or isinstance(p[7].data, list))):
         print("Error at line : " + str(p.lineno(0)) + " :: " +
               "Return type is not void, must include a return statement")
         exit()
-    if not isCompatible(p[1].data["type"], p[3].data["ret_type"]):
+    if not isCompatible(p[1].data["type"], p[7].data["ret_type"]):
         print("Error at line : " + str(p.lineno(0)) +
               " :: " + "Return type mismatch")
         exit()
     funcData, scp = checkEntry(p[2].data["name"], 0)
-    funcData["ret_type"] = p[1].data["type"]
-    funcData["func_offset"] = getOffset()
+    funcData['declaration'] = False
+    funcData["stack_space"] = getOffset()
     updateEntry(p[2].data["name"], funcData)
     popOffset()
+
+    p[0].code = [quad("label", [funcData["label"] , "", ""], funcData["name"] + "|" + funcData["input_type"] + ":"), quad("BeginFunc", [str(funcData["stack_space"]), "", ""], "    BeginFunc " + str(funcData["stack_space"]))] + p[5].code + [ "    " + i for i in p[7].code] 
 
 
 # Error rule for syntax errors
@@ -2360,7 +2477,7 @@ def main():
         f1.write("\t" + str(i) + "\t\t" + str(scopeTables[i].parent) + "\n")
 
     f2 = open("symTab.obj", "wb")
-    pickle.dump(scopeTableList,f2)
+    pickle.dump(scopeTables,f2)
 
 
 if '__main__' == __name__:
