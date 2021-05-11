@@ -1,42 +1,32 @@
-#!/usr/bin/env python3
 import ply.lex as lex
 import sys
 import re
 
 reserved = {
-    'auto' : 'AUTO',
     'break' : 'BREAK',
     'case' : 'CASE',
     'char' : 'CHAR',
-    'const' : 'CONST',
     'continue' : 'CONTINUE',
     'default' : 'DEFAULT',
     'do' : 'DO',
-    'double' : 'DOUBLE',
+    # 'double' : 'DOUBLE',
     'else' : 'ELSE',
-    'enum' : 'ENUM',
-    'extern' : 'EXTERN',
     'float' : 'FLOAT',
     'for' : 'FOR',
-    'goto' : 'GOTO',
+    # 'goto' : 'GOTO',
     'if' : 'IF',
     'int' : 'INT',
-    'long' : 'LONG',
-    'register' : 'REGISTER',
+    # 'long' : 'LONG',
     'return' : 'RETURN',
-    'short' : 'SHORT',
-    'signed' : 'SIGNED',
+    # 'short' : 'SHORT',
+    # 'signed' : 'SIGNED',
     'sizeof' : 'SIZEOF',
-    'static' : 'STATIC',
     'struct' : 'STRUCT',
     'switch' : 'SWITCH',
-    'typedef' : 'TYPEDEF',
     'union' : 'UNION',
-    'unsigned' : 'UNSIGNED',
+    # 'unsigned' : 'UNSIGNED',
     'void' : 'VOID',
-    'volatile' : 'VOLATILE',
     'while' : 'WHILE',
-    '_Packed' : '_PACKED',
 }
 
 tokens = [
@@ -84,8 +74,7 @@ tokens = [
     'QUESTION',
     'COLON',
     'ARROW',
-    'HASH',
-    'ELLIPSIS',
+    # 'ELLIPSIS',
 
     'L_PAREN',
     'R_PAREN',
@@ -95,6 +84,7 @@ tokens = [
     'R_SQBR',
 
     'INT_CONSTANT',
+    'CHAR_CONSTANT',
     'FLOAT_CONSTANT',
     'ID',
     'STRING'
@@ -144,8 +134,7 @@ t_DOT             = r'\.'
 t_QUESTION        = r'\?'
 t_COLON           = r':'
 t_ARROW           = r'->'
-t_HASH			  = r'\#'
-t_ELLIPSIS        = r'\.\.\.'
+# t_ELLIPSIS        = r'\.\.\.'
 
 t_L_PAREN         = r'\('
 t_R_PAREN         = r'\)'
@@ -168,6 +157,12 @@ def t_ID(t):
 def t_FLOAT_CONSTANT(t):
     r'((\d*\.\d+)|(\d+\.\d*))([Ee][+-]?\d+)?|(\d+[Ee][+-]?\d+)'
     t.value = float(t.value)
+    return t
+
+
+def t_CHAR_CONSTANT(t):
+    r'\'.\''
+    t.value = t.value
     return t
 
 
