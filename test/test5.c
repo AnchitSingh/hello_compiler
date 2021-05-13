@@ -5,16 +5,21 @@ int main() {
     {
         // First if statement
         if (i < 15){
-           printf("i is smaller than 15\n");
+           prints("i is smaller than 15", 20);
+           printnl();
  
 			// Nested - if statement
 			// Will only be executed if statement above
 			// is true
-			if (i < 12)
-				printf("i is smaller than 12 too\n");
+			if (i < 12){
+				prints("i is smaller than 12 too", 24);
+                printnl();
+            }
 		}
-        else
-            printf("i is greater than 15");
+        else{
+            prints("i is greater than 15", 20);
+            printnl();
+        }
     }
     return 0;
 }
