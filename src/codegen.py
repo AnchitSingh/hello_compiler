@@ -1,23 +1,19 @@
 import re
 import pickle
 import operator
-import struct
 
 
 f1 = open("symTab.obj", "rb")
 scopeTables = pickle.load(f1)
-currentScopeId = 0
-
 f2 = open("3AC.obj", "rb")
 code3ac = pickle.load(f2)
 
+
+currentScopeId = 0
 FileName = ""
 lineno = 0
 asmcode = []
 
-
-def binary(float_):
-    return bin(struct.unpack('!i', struct.pack('!f', float_))[0])
 
 def checkEntry(identifier, scopeId=None):
     global scopeTables
@@ -65,13 +61,13 @@ def loadAddr(reg, var):
                 asmcode.append("lea (%ebp, %esi, 1), %" + reg)
                 asmcode.append("pop %esi")
             else:
-                # offset is int
+                # offset is int/constant
                 asmcode.append("lea " + str(-int(offset)) + "(%ebp), %" + reg)
         else:
-            print("error in load Addr, base is not rbp or zero ")
+            print("error in load Addr | base is not rbp or zero")
             exit(-1)
     else:
-        print("var is not a variable ")
+        print("error in load Addr | var is not a variable | " + var)
         exit(-1)
 
 
@@ -81,7 +77,6 @@ def loadVar(reg, var):
     if "@" in var:
         if var.split('@')[0] == "tmp":
             var_entry = checkEntry(var)[0]
-        # ye kidr aaya gbl
         elif var.split('@')[0] == "gbl":
             asmcode.append("mov $" + var + ", %" + reg)
             return
@@ -94,7 +89,6 @@ def loadVar(reg, var):
 
         if "@" in offset:
             # offset is variable
-            r = "esi"
             if base == "0":
                 loadVar("esi", offset)
                 if type_[-1] == '*' or type_ in ["int", "float"]:
@@ -102,7 +96,7 @@ def loadVar(reg, var):
                 elif type_ == "char":
                     asmcode.append("movb (%esi), %" + reg[1] + "l")
                 else:
-                    print("struct error in load")
+                    print("error in load Var | struct error in load")
                     exit(-1)
             elif base == "rbp":
                 loadVar("esi", offset)
@@ -113,15 +107,15 @@ def loadVar(reg, var):
                     asmcode.append("neg %esi")
                     asmcode.append("movb (%ebp , %esi, 1), %" + reg[1] + "l")
                 else:
-                    print(" struct error in load")
+                    print("error in load Var | struct error in load")
                     exit(-1)
             else:
-                print("wrong base in load")
+                print("error in load Var | wrong base in load")
                 exit(-1)
         else:
-            # offset is int
+            # offset is int/constant
             if base == "0":
-                print("constant offset with base 0")
+                print("error in load Var | constant offset with base 0")
                 exit(-1)
             elif base == "rbp":
                 if type_[-1] == '*' or type_ in ["int", "float"]:
@@ -129,18 +123,18 @@ def loadVar(reg, var):
                 elif type_ == "char":
                     asmcode.append("movb " + str(-int(offset)) + "(%ebp), %" + reg[1] + "l")
                 else:
-                    print("class error in load")
+                    print("error in load Var | struct error in load")
                     exit(-1)
             else:
-                print("wrong base in load")
+                print("error in load Var | wrong base in load")
                 exit(-1)
     else:
         if var[0] == "'" and var[2] == "'" and len(var) == 3:
-            asmcode.append("movb $" + str(ord(var[1]))+" , %" + reg[1] + "l")
+            asmcode.append("movb $" + str(ord(var[1])) + ", %" + reg[1] + "l")
         elif var.lstrip("-").isdigit():
-            asmcode.append("mov $" + var + " , %" + reg)
+            asmcode.append("mov $" + var + ", %" + reg)
         else:
-            print(var + " | Error in load var")
+            print("error in load Var | " + var)
             exit(-1)
 
 
@@ -166,124 +160,41 @@ def storeVar(reg, var):
                 elif type_ == "char":
                     asmcode.append("movb %" + reg[1] + "l" + ", (%edi)")
                 else:
-                    print(var, " struct error in store")
+                    print("error in store Var | struct error in store | " + var)
                     exit(-1)
             elif base == "rbp":
                 loadVar("edi", offset)
                 if type_[-1] == '*' or type_ in ["int", "float"]:
                     asmcode.append("neg %edi")
-                    asmcode.append("mov %" + reg + ", (%ebp , %edi, 1)")
+                    asmcode.append("mov %" + reg + ", (%ebp, %edi, 1)")
                 elif type_ == "char":
                     asmcode.append("neg %edi")
-                    asmcode.append(
-                        "movb %" + reg[1] + "l" + ", (%ebp , %edi, 1)")
+                    asmcode.append("movb %" + reg[1] + "l" + ", (%ebp, %edi, 1)")
                 else:
-                    print(var, " struct error in store")
+                    print("error in store Var | struct error in store | " + var)
                     exit(-1)
             else:
-                print("wrong base in store")
+                print("error in store Var | wrong base in store")
                 exit(-1)
         else:
-            # offset is int
+            # offset is int/constant
             if base == "0":
-                print("error : constant offset with base 0")
+                print("error in store Var | constant offset with base 0")
                 exit(-1)
             elif base == "rbp":
                 if type_[-1] == '*' or type_ in ["int", "float"]:
-                    asmcode.append("mov %" + reg + " , " + str(-int(offset)) + "(%ebp)")
+                    asmcode.append("mov %" + reg + ", " + str(-int(offset)) + "(%ebp)")
                 elif type_ == "char":
-                    asmcode.append(
-                        "movb %" + reg[1] + "l" + " , " + str(-int(offset)) + "(%ebp)")
+                    asmcode.append("movb %" + reg[1] + "l" + ", " + str(-int(offset)) + "(%ebp)")
                 else:
-                    print(type_, var, " struct error in store")
+                    print("error in store Var | struct error in store | " + var)
                     exit(-1)
             else:
-                print("wrong base in store")
+                print("error in store Var | wrong base in store")
                 exit(-1)
     else:
-        print("Error in storing var")
+        print("error in store Var")
         exit(-1)
-
-
-# def loadFloatVar(var):
-#     global asmcode
-#     var = str(var)
-#     if "@" in var:
-#         if var.split('@')[0] == "tmp":
-#             var_entry = checkEntry(var)[0]
-#         else:
-#             var_entry = checkEntry(var.split('@')[0], int(var.split('@')[1]))[0]
-
-#         offset = str(var_entry["offset"])
-#         base = str(var_entry["base"])
-#         type_ = var_entry["type"]
-#         if "@" in offset:
-#             # offset in variable
-#             if base == "0":
-#                 loadVar("esi", offset)
-#                 if type_ == "int":
-#                     asmcode.append("fild " + "(%esi)")
-#                 elif type_ == "float":
-#                     asmcode.append("fld " + "(%esi)")
-#                 else:
-#                     print("error in load float")
-#                     exit(-1)
-#             elif base == "rbp":
-#                 loadVar("esi", offset)
-#                 if type_ == "int":
-#                     asmcode.append("neg %esi")
-#                     asmcode.append("fild (%ebp , %esi, 1)")
-#                 elif type_ == "float":
-#                     asmcode.append("neg %esi")
-#                     asmcode.append("fld (%ebp , %esi, 1)")
-#                 else:
-#                     print("error in load float")
-#                     exit(-1)
-#             else:
-#                 print("wrong base in load")
-#                 exit(-1)
-#         else:
-#             if type_ == "int":
-#                 asmcode.append("fild " + str(-int(offset)) + "(%ebp)")
-#             elif type_ == "float":
-#                 asmcode.append("fld " + str(-int(offset)) + "(%ebp)")
-#             else:
-#                 print("error in load float")
-#                 exit(-1)
-#     else:
-#         pass
-#         print("var is not var")
-#         exit(-1)
-
-
-# def storeFloatVar(var):
-#     global asmcode
-#     var = str(var)
-#     if "@" in var:
-#         if var.split('@')[0] == "tmp":
-#             var_entry = checkEntry(var)[0]
-#         else:
-#             var_entry = checkEntry(var.split('@')[0], int(var.split('@')[1]))[0]
-
-#         offset = str(var_entry["offset"])
-#         base = str(var_entry["base"])
-#         if "@" in offset:
-#             if base == "0":
-#                 loadVar("esi", offset)
-#                 asmcode.append("fstp " + "(%esi)")
-#             elif base == "rbp":
-#                 loadVar("esi", offset)
-#                 asmcode.append("neg %esi")
-#                 asmcode.append("fstp (%ebp , %esi, 1)")
-#             else:
-#                 print("wrong base in load")
-#                 exit(-1)
-#         else:
-#             asmcode.append("fstp " + str(-int(offset)) + "(%ebp)")
-#     else:
-#         pass
-#         print("verror in store float")
-#         exit(-1)
 
 
 def movVar(srcOffset, srcBase, destOffset, destBase, size):
@@ -702,20 +613,6 @@ def op_printc(instr):
     asmcode.append("pop %ebp")
 
 
-def op_printf(instr):
-    inp = instr[0]
-    loadFloatVar(inp)
-    asmcode.append("push %ebp")
-    asmcode.append("mov %esp, %ebp")
-    asmcode.append("sub $4, %esp")
-    asmcode.append("fstp -4(%esp)")
-    asmcode.append("push $printf_fmt")
-    asmcode.append("call printf")
-    asmcode.append("add $4, %esp")
-    asmcode.append("mov %ebp, %esp")
-    asmcode.append("pop %ebp")
-
-
 def op_printnl(instr):
     asmcode.append("push %ebp")
     asmcode.append("mov %esp, %ebp")
@@ -751,91 +648,6 @@ def op_scanc(instr):
     asmcode.append("add $8, %esp")
     asmcode.append("mov %ebp, %esp")
     asmcode.append("pop %ebp")
-
-
-def op_scanf(instr):
-    inp = instr[0]
-    loadAddr("eax", inp)
-    asmcode.append("push %ebp")
-    asmcode.append("mov %esp, %ebp")
-    asmcode.append("sub $4, %esp")
-    asmcode.append("fstp -4(%esp)")
-    asmcode.append("push $scanf_fmt")
-    asmcode.append("call scanf")
-    asmcode.append("add $4, %esp")
-    asmcode.append("mov %ebp, %esp")
-    asmcode.append("pop %ebp")
-
-
-
-
-
-# def op_float_add(instr):
-#     out, inp1, inp2 = instr
-#     loadFloatVar(inp1)
-#     loadAddr("eax", inp2)
-#     asmcode.append("fadd (%eax)")
-#     storeFloatVar(out)
-
-
-# def op_float_sub(instr):
-#     out, inp1, inp2 = instr
-#     loadFloatVar(inp1)
-#     loadAddr("eax", inp2)
-#     asmcode.append("fsub (%eax)")
-#     storeFloatVar(out)
-
-
-# def op_float_mult(instr):
-#     out, inp1, inp2 = instr
-#     loadFloatVar(inp1)
-#     loadAddr("eax", inp2)
-#     asmcode.append("fmul (%eax)")
-#     storeFloatVar(out)
-
-
-# def op_float_div(instr):
-#     out, inp1, inp2 = instr
-#     loadFloatVar(inp1)
-#     loadAddr("eax", inp2)
-#     asmcode.append("fdiv (%eax)")
-#     storeFloatVar(out)
-
-
-# def op_float_comp(instr, comp):
-#     out, inp1, inp2 = instr
-#     loadFloatVar(inp2)
-#     loadFloatVar(inp1)
-#     asmcode.append("fcomip")
-#     asmcode.append("fstp %st(0)")
-#     asmcode.append("mov $0, %ecx")
-#     if comp == "float<":
-#         asmcode.append("setb %cl")
-#     elif comp == "float>":
-#         asmcode.append("seta %cl")
-#     elif comp == "float<=":
-#         asmcode.append("setbe %cl")
-#     elif comp == "float>=":
-#         asmcode.append("setae %cl")
-#     elif comp == "float==":
-#         asmcode.append("sete %cl")
-#     elif comp == "float!=":
-#         asmcode.append("setne %cl")
-
-#     storeVar("ecx", out)
-
-
-# def op_float_assign(instr):
-#     out, inp = instr
-#     if "@" in inp:
-#         loadFloatVar(inp)
-#         storeFloatVar(out)
-#     else:
-#         # it is constant assignment like a = 1.4 ;
-#         dec = float(str(inp))
-#         bin_ = binary(dec)
-#         asmcode.append("mov $" + str(bin_) + " ,%eax")
-#         storeVar("eax", out)
 
 
 def gencode(instr):
@@ -913,31 +725,16 @@ def gencode(instr):
         op_printi(instr["arg"])
     elif instr["op"] == "printc":
         op_printc(instr["arg"])
-    elif instr["op"] == "printf":
-        op_printf(instr["arg"])
     elif instr["op"] == "printnl":
         op_printnl(instr["arg"])
     elif instr["op"] == "scani":
         op_scani(instr["arg"])
     elif instr["op"] == "scanc":
         op_scanc(instr["arg"])
-    elif instr["op"] == "scanf":
-        op_scanf(instr["arg"])
     
-    
-    
-    # elif instr["op"] == "float=":
-    #     op_float_assign(instr["arg"])
-    # elif instr["op"] == "float+":
-    #     op_float_add(instr["arg"])
-    # elif instr["op"] == "float-":
-    #     op_float_sub(instr["arg"])
-    # elif instr["op"] == "float*":
-    #     op_float_mult(instr["arg"])
-    # elif instr["op"] == "float/":
-    #     op_float_div(instr["arg"])
-    # elif instr["op"] in ["float<", "float>", "float==", "float<=", "float>=", "float!="]:
-    #     op_float_comp(instr["arg"], instr["op"])
+    elif instr["op"][:5] == "float":
+        print("error: float is not done")
+        exit(-1)
 
 
 if __name__ == "__main__":
@@ -948,10 +745,10 @@ if __name__ == "__main__":
     asmcode.append('printnl_fmt:\n\t\t .string "\\n"')
     asmcode.append('scanc_fmt:\n\t\t .string "%c"')
     asmcode.append('scani_fmt:\n\t\t .string "%d"')
-    asmcode.append('scanf_fmt:\n\t\t .string "%f"')
-    for j in scopeTables[0].table.items():
-        if isinstance(j[1], dict) and "base" in j[1].keys() and "offset" in j[1].keys():
-            asmcode.append(str(j[1]["offset"]) + ':\n\t\t .zero ' + str(j[1]["size"]) + ' ')
+    for globl in scopeTables[0].table.items():
+        data = globl[1]
+        if isinstance(data, dict) and "base" in data.keys() and "offset" in data.keys():
+            asmcode.append(str(data["offset"]) + ':\n\t\t .zero ' + str(data["size"]) + ' ')
     asmcode.append(".text")
     asmcode.append(".global main")
     asmcode.append(".type main, @function")
@@ -965,7 +762,6 @@ if __name__ == "__main__":
                 stmt.append(arg)
         instr = {"op": stmt[1].strip(), "arg": stmt[2:-1]}
         currentScopeId = int(stmt[-1])
-        asmcode.append("// " + code.split('$')[0])
         gencode(instr)
 
     asmfile = open('asmfile.s', 'w')

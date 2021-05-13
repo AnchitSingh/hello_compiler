@@ -86,6 +86,8 @@ gblCount = 0
 labelId = {}
 
 structs = []
+funcs = []
+fcalls = []
 
 
 def pushScope():
@@ -115,12 +117,12 @@ def pushEntry(identifier, data, scope=None):
     global currentScopeId
     global gblCount
 
-    if isinstance(identifier, dict) and currentScopeId == 0 and "size" in identifier.keys() and "offset" in identifier.keys() and "base" in identifier.keys():
-        identifier["offset"] = "gbl@" + str(gblCount)
+    if isinstance(data, dict) and currentScopeId == 0 and "size" in data.keys() and "offset" in data.keys() and "base" in data.keys():
+        data["offset"] = "gbl@" + str(gblCount)
         gblCount = gblCount + 1
 
-    if isinstance(identifier, dict) and "base" in identifier.keys():
-        identifier["base"] = str(identifier["base"])
+    if isinstance(data, dict) and "base" in data.keys():
+        data["base"] = str(data["base"])
 
     if scope is None:
         scope = currentScopeId
@@ -274,6 +276,11 @@ def p_program(p):
             print("Error :: " + "continue should be inside for/do-while/while")
             exit()
 
+    for fcall in fcalls:
+        if(fcall in funcs):
+            print("Error :: " + fcall + " | function call without definition")
+            exit()
+
     global filename
     cfile = open("3AC.code", 'w')
     code = []
@@ -297,13 +304,12 @@ def p_program(p):
 
 def p_MM(p):
     '''MM : '''
-    pushEntry("printi", {"name" : "printi", "type" : "function", "class" : "function", "ret_type" : None, "input_type" : "int", "definition": True}, 0)
-    pushEntry("printc", {"name" : "printc", "type" : "function", "class" : "function", "ret_type" : None, "input_type" : "char", "definition": True}, 0)
-    pushEntry("printf", {"name" : "printf", "type" : "function", "class" : "function", "ret_type" : None, "input_type" : "float", "definition": True}, 0)
-    pushEntry("printnl", {"name" : "printnl", "type" : "function", "class" : "function", "ret_type" : None, "input_type" : "float", "definition": True}, 0)
-    pushEntry("scani", {"name" : "scani", "type" : "function", "class" : "function", "ret_type" : None, "input_type" : "int*", "definition": True}, 0)
-    pushEntry("scanc", {"name" : "scanc", "type" : "function", "class" : "function", "ret_type" : None, "input_type" : "char*", "definition": True}, 0)
-    pushEntry("scanf", {"name" : "scanf", "type" : "function", "class" : "function", "ret_type" : None, "input_type" : "float*", "definition": True}, 0)
+    pushEntry("printi", {"name" : "printi", "type" : "function", "class" : "function", "ret_type" : "void", "input_type" : "int", "definition": True}, 0)
+    pushEntry("printc", {"name" : "printc", "type" : "function", "class" : "function", "ret_type" : "void", "input_type" : "char", "definition": True}, 0)
+    pushEntry("printnl", {"name" : "printnl", "type" : "function", "class" : "function", "ret_type" : "void", "input_type" : "", "definition": True}, 0)
+    pushEntry("prints", {"name" : "prints", "type" : "function", "class" : "function", "ret_type" : "void", "input_type" : "char*,int", "definition": True, "label" : "func#0", "parameter_space" : 8}, 0)
+    pushEntry("scani", {"name" : "scani", "type" : "function", "class" : "function", "ret_type" : "void", "input_type" : "int", "definition": True}, 0)
+    pushEntry("scanc", {"name" : "scanc", "type" : "function", "class" : "function", "ret_type" : "void", "input_type" : "char", "definition": True}, 0)
 
 
 def p_primary_expression_0(p):
@@ -333,6 +339,7 @@ def p_primary_expression_0(p):
 
     elif isinstance(p[1].data, str) and p[1].data[0] == '"':
         p[0].data["type"] = "char*"
+        return
 
     else:
         p[0].data["type"] = "void*"
@@ -401,9 +408,9 @@ def p_postfix_expression_0(p):
         if p[3].data["type"] != "int":
             print("Error at line : " + str(p.lineno(2)) + " :: " + p[1].data["name"] + " | Array index is not integer")
             exit()
-        if "value" in p[3].data.keys() and "meta" in p[1].data.keys() and p[1].data["meta"] != [] and p[3].data["value"] >= p[1].data["meta"][0]:
-            print("Error at line : " + str(p.lineno(2)) + " :: " + p[1].data["name"] + " | Array index is out of bounds")
-            exit()
+        # if "value" in p[3].data.keys() and "meta" in p[1].data.keys() and p[1].data["meta"] != [] and p[3].data["value"] >= p[1].data["meta"][0]:
+        #     print("Error at line : " + str(p.lineno(2)) + " :: " + p[1].data["name"] + " | Array index is out of bounds")
+        #     exit()
         if p[1].data["type"][-1] != '*':
             print("Error at line : " + str(p.lineno(2)) + " :: " + p[1].data["name"] + " | Type is not an array or pointer")
             exit()
@@ -483,7 +490,7 @@ def p_postfix_expression_1(p):
         p[0].data["base"] = base
         
         p[0].place = getNewTmp(res_["type"], tmp_var, res_["size"], base)
-        p[0].code = p[1].code + [ quadGen( op, [ tmp_var, p[1].data["offset"], p[1].data["size"] - res_["offset"] ] ) ]
+        p[0].code = p[1].code + [ quadGen( op, [ tmp_var, (p[1].data["offset"] if p[2].parse == '.' else p[1].place), p[1].data["size"] - res_["offset"] ] ) ]
 
 
 def p_postfix_expression_2(p):
@@ -500,11 +507,28 @@ def p_postfix_expression_2(p):
         print("Error at line : " + str(p.lineno(2)) + " :: " + p[1].data["name"] + " | Identifier is not a function type")
         exit()
     if(p[1].data["definition"] is False):
-        print("Error at line : " + str(p.lineno(2)) + " :: " + p[1].data["name"] + " | Function is not defined only declared")
-        exit()
+        fcalls.append(p[1].data["name"])
     p[0].data["type"] = p[1].data["ret_type"]
-
-    if(p[1].data["name"] not in ["printi", "printc", "printf", "printnl", "scani", "scanc", "scanf"]):
+    if(p[1].data["name"] not in ["printi", "printc", "printnl", "scani", "scanc"]):
+        for idx, val in enumerate(p[3].place):
+            if(val is None):
+                str_data = p[3].data[len(p[3].place) - 1 - idx]["value"][1:-1]
+                tmp_var = getNewTmp("char*", getOffset() + len(str_data), len(str_data))
+                addToOffset(len(str_data))
+                p[3].place[idx] = tmp_var
+                res, scp = checkEntry(tmp_var)
+                res["meta"] = [len(str_data)]
+                res["is_array"] = True
+                res["element_type"] = "char"
+                updateEntry(tmp_var, res, scp)
+                for i in range(res["size"]):
+                    if str(res["base"]) == "rbp":
+                        offset = res["offset"] - i
+                    else:
+                        offset = res["offset"] + i
+                    tmp_entry = getNewTmp("char", offset, 1, res["base"]) 
+                    p[3].code = p[3].code + [ quadGen( "=", [ tmp_entry, '\'' + str_data[i] + '\'' ] ) ]
+        
         input_list = p[1].data["input_type"].split(',')
         if(len(input_list) == 1 and input_list[0] == ''):
             input_list = []
@@ -895,11 +919,17 @@ def p_equality_expression(p):
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         if(p[1].data["type"] != p[3].data["type"]):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type mismatch in two operands of equality operation")
-            exit()
+            if(p[1].data["type"] == "void*" or p[3].data["type"] == "void*"):
+                pass
+            else:
+                print("Error at line : " + str(p.lineno(2)) + " :: " + "Type mismatch in two operands of equality operation")
+                exit()
         if p[1].data["type"] not in ["char", "int", "float"] or p[3].data["type"] not in ["char", "int", "float"]:
-            print("Error at line : " + str(p.lineno(1)) + " :: " + "Type not compatible with equality operation")
-            exit()
+            if(p[1].data["type"][-1] == "*" and p[3].data["type"][-1] == "*"):
+                pass
+            else:
+                print("Error at line : " + str(p.lineno(2)) + " :: " + "Type not compatible with equality operation")
+                exit()
         p[0].data["type"] = "int"
 
         p[0].place = getNewTmp("int")
@@ -1025,7 +1055,9 @@ def p_logical_and_expression(p):
         p[0].data["type"] = "int"
 
         p[0].place = getNewTmp("int")
-        p[0].code = p[1].code + p[3].code + [ quadGen( p[2].data, [ p[0].place, p[1].place, p[3].place ] ) ]
+        p[0].zero = getNewLabel("zero")
+        p[0].after = getNewLabel("and_after")
+        p[0].code = p[1].code + [ quadGen( "ifz", [ p[1].place, p[0].zero ], "ifz " + p[1].place + " goto->" + p[0].zero ) ] + p[3].code + [ quadGen( "ifz", [ p[3].place, p[0].zero ], "ifz " + p[3].place + " goto->" + p[0].zero ) ] + [ quadGen( "=", [ p[0].place, "1" ] ) ] + [ quadGen( "goto", [ p[0].after ], "goto->" + p[0].after ) ] + [ quadGen( "label", [ p[0].zero ], p[0].zero + ":" ) ] + [ quadGen( "=", [ p[0].place, "0" ] ) ] + [ quadGen( "label", [ p[0].after ], p[0].after + ":" ) ]
 
 
 def p_logical_or_expression(p):
@@ -1056,7 +1088,9 @@ def p_logical_or_expression(p):
         p[0].data["type"] = "int"
 
         p[0].place = getNewTmp("int")
-        p[0].code = p[1].code + p[3].code + [ quadGen( p[2].data, [ p[0].place, p[1].place, p[3].place ] ) ]
+        p[0].one = getNewLabel("one")
+        p[0].after = getNewLabel("or_after")
+        p[0].code = p[1].code + [ quadGen( "ifnz", [ p[1].place, p[0].one ], "ifnz " + p[1].place + " goto->" + p[0].one ) ] + p[3].code + [ quadGen( "ifnz", [ p[3].place, p[0].one ], "ifz " + p[3].place + " goto->" + p[0].one ) ] + [ quadGen( "=", [ p[0].place, "0" ] ) ] + [ quadGen( "goto", [ p[0].after ], "goto->" + p[0].after ) ] + [ quadGen( "label", [ p[0].one ], p[0].one + ":" ) ] + [ quadGen( "=", [ p[0].place, "1" ] ) ] + [ quadGen( "label", [ p[0].after ], p[0].after + ":" ) ]
 
 
 def p_conditional_expression(p):
@@ -1090,7 +1124,7 @@ def p_conditional_expression(p):
         p[0].place = getNewTmp(p[0].data["type"])
         p[0].else_ = getNewLabel("else_part")
         p[0].after = getNewLabel("after")
-        p[0].code = p[1].code + tmp_code + [ quadGen( "ifz", [ p[1].place, p[0].else_ ], "ifz " + p[1].place + " goto->" + p[0].else_ ) ] + p[3].code + [ quadGen( "goto", [ p[0].after ], "goto->" + p[0].after ) ] + [ quadGen( "label", [ p[0].else_ ], p[0].else_ + ":" ) ] +  p[5].code + [ quadGen( "label", [ p[0].after ], p[0].after + ":" ) ]
+        p[0].code = p[1].code + tmp_code + [ quadGen( "ifz", [ p[1].place, p[0].else_ ], "ifz " + p[1].place + " goto->" + p[0].else_ ) ] + p[3].code + [ quadGen( "=", [ p[0].place, p[3].place ] ) ] + [ quadGen( "goto", [ p[0].after ], "goto->" + p[0].after ) ] + [ quadGen( "label", [ p[0].else_ ], p[0].else_ + ":" ) ] +  p[5].code + [ quadGen( "=", [ p[0].place, p[5].place ] ) ] + [ quadGen( "label", [ p[0].after ], p[0].after + ":" ) ]
 
 
 def p_constant_expression(p):
@@ -1225,6 +1259,9 @@ def p_declaration(p):
                 print("Error at line : " + str(p.lineno(3)) + " :: " + data["name"] + " | Can not declare void type variable")
                 exit()
             if("init_type" in decl.keys()):
+                if(currentScopeId == 0):
+                    print("Error at line : " + str(p.lineno(3)) + " :: " + "Variables can not be initialised in global scope")
+                    exit()
                 if decl["init_type"] != data["type"]:
                     if(decl["init_type"] == "void*" and data["type"][-1] == "*"):
                         pass
@@ -1237,12 +1274,20 @@ def p_declaration(p):
                 data["meta"] = decl["meta"]
 
             if len(data["meta"]) != 0:
+                if(data["type"] == "char*") and "init_type" in decl.keys():
+                    if(data["meta"][0] == 1):
+                        data["meta"][0] = len(decl["str_data"])
+                    else:
+                        if(data["meta"][0] < len(decl["str_data"])):
+                            print("Error at line : " + str(p.lineno(3)) + " :: " + "Insufficient char array size")
+                            exit()
                 data["is_array"] = True
                 data["element_type"] = data["type"][:-1]
 
                 arr_size = 1
                 for dim in data["meta"]:
                     arr_size = arr_size * dim
+                    
 
                 data["size"] = getSize(data["element_type"]) * arr_size
                 addToOffset(data["size"])
@@ -1258,6 +1303,16 @@ def p_declaration(p):
                     addToOffset(-data["size"])
                     print("Error at line : " + str(p.lineno(0)) + " :: " + decl["name"] + " | Redeclaration of variable")
                     exit()
+
+                if(data["type"] == "char*" and "init_type" in decl.keys()):
+                    for i in range(data["size"]):
+                        if str(data["base"]) == "rbp":
+                            offset = data["offset"] - i
+                        else:
+                            offset = data["offset"] + i
+                        tmp_entry = getNewTmp("char", offset, 1, data["base"]) 
+                        p[0].code = p[0].code + [ quadGen( "=", [ tmp_entry, '\'' + decl["str_data"][i] + '\'' ] ) ]
+                        
             else:
                 data["size"] = getSize(data["type"])
                 addToOffset(data["size"])
@@ -1279,6 +1334,10 @@ def p_declaration(p):
                     p[0].code = p[0].code + [ quadGen( op+"=", [ decl["name"] + "@" + str(currentScopeId), decl["place"] ] ) ]
     else:
         popOffset()
+        if(p[2].data["name"] in funcs):
+            print("Error at line : " + str(p.lineno(3)) + " :: " + p[2].data["name"] + " | Redeclaration of function variable")
+            exit()
+        funcs.append(p[2].data["name"])
 
 
 def p_declaration_specifiers(p):
@@ -1336,7 +1395,9 @@ def p_init_declarator(p):
     else:
         p[0].parse = add_to_tree([p[0], p[1], p[3]], p[2].parse)
         p[0].data["init_type"] = p[3].data["type"]
-
+        if(p[3].data["type"] == "char*"):
+            p[0].data["str_data"] = p[3].data["value"][1:-1]
+        
         p[0].data["place"] = p[3].place
         p[0].code = p[3].code.copy()
 
@@ -1563,8 +1624,11 @@ def p_direct_decalarator(p):
 
         res, scp = checkEntry(p[1].data, currentScopeId)
         if(res is not False):
-            print("Error at line : " + str(p.lineno(1)) + " :: " + p[1].data + " | Identifier is already declared in same scope")
-            exit()
+            if(res["name"] in funcs):
+                pass
+            else:
+                print("Error at line : " + str(p.lineno(1)) + " :: " + p[1].data + " | Identifier is already declared in same scope")
+                exit()
         p[0].data = {"name": setData(p, 1), "type": "", "meta": []}
 
         p[0].place = p[1].data + "@" + str(scp)
@@ -1657,10 +1721,14 @@ def p_parameter_type_list(p):
 
     if res is False:
         pushEntry(f_name, p[0].data, parent)
-    else:
+    elif res["definition"] is True:
         # this function name is seen but may be overloaded
-        print("Error at line : " + str(p.lineno(1)) + " :: " + f_name + " | Function may be overloaded")
+        print("Error at line : " + f_name + " | Function is already defined")
         exit()
+    else:
+        if res["input_type"] != input_type or res["ret_type"] != ret_type:
+            print("Error at line : " + f_name + " | Function signature in definition and declaration does not match")
+            exit()
 
 
 def p_parameter_list(p):
@@ -1896,8 +1964,13 @@ def p_statement_list(p):
         p[0].data = {}
         if "retType" in p[1].data.keys():
             if "retType" in p[2].data.keys() and p[1].data["retType"] != p[2].data["retType"]:
-                print("Error at line : " + str(p.lineno(2)) + " :: " + "Return type mismatch")
-                exit()
+                if(p[1].data["retType"] == "void*" and p[2].data["retType"][-1] == "*"):
+                    p[0].data["retType"] = p[2].data["retType"]
+                elif(p[2].data["retType"] == "void*" and p[1].data["retType"][-1] == "*"):
+                    p[0].data["retType"] = p[1].data["retType"]
+                else:
+                    print("Error at line : " + str(p.lineno(2)) + " :: " + "Return type mismatch")
+                    exit()
             else:
                 p[0].data["retType"] = p[1].data["retType"]
         elif "retType" in p[2].data.keys():
@@ -1962,8 +2035,13 @@ def p_selection_statement_1(p):
     p[0].data = {}
     if "retType" in p[6].data.keys():
         if "retType" in p[10].data.keys() and p[6].data["retType"] != p[10].data["retType"]:
-            print("Error at line : " + str(p.lineno(10)) + " :: " + "Return type mismatch")
-            exit()
+            if(p[6].data["retType"] == "void*" and p[10].data["retType"][-1] == "*"):
+                p[0].data["retType"] = p[10].data["retType"]
+            elif(p[10].data["retType"] == "void*" and p[6].data["retType"][-1] == "*"):
+                p[0].data["retType"] = p[6].data["retType"]
+            else:
+                print("Error at line : " + str(p.lineno(10)) + " :: " + "Return type mismatch")
+                exit()
         else:
             p[0].data["retType"] = p[6].data["retType"]
     elif "retType" in p[10].data.keys():
@@ -2187,7 +2265,9 @@ def p_function_definition(p):
         p[0].parse = add_to_tree([p[0], p[2].parse[-2:-1], t1], f_name)
     
     ret_type = p[1].data["type"] + p[2].data["type"]
-
+    if isinstance(p[8].data, list):
+        p[8].data = {"retType": "void"}
+        p[8].code = p[8].code + [ quadGen( "return", [ ], "return" ) ]
     if(p[8].data == {} or "retType" not in p[8].data.keys()):
         p[8].data["retType"] = "void"
         p[8].code = p[8].code + [ quadGen( "return", [ ], "return" ) ]
@@ -2201,12 +2281,16 @@ def p_function_definition(p):
     popOffset()
     
     p[0].code = [ quadGen( "label", [ res["label"] ], res["name"] + "|" + res["input_type"] + ":" ), quadGen( "beginFunc", [ str(res["stack_space"]) ], "    beginFunc " + str(res["stack_space"]) ) ] + p[5].code + [ "    " + i for i in p[8].code ]
+    if(res["ret_type"] == "void" and p[0].code[-1][:6] != "return"):
+        p[0].code = p[0].code + [ quadGen( "return", [ ], "return" ) ]
 
 
 def p_M(p):
     '''M : '''
     res, scp = checkEntry(p[-5].data["name"], 0)
     res["definition"] = True
+    if res["name"] in funcs:
+        funcs.remove(res["name"])
     updateEntry(p[-5].data["name"], res, 0)
 
 

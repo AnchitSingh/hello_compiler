@@ -14,7 +14,7 @@ else
 fi
 
 if [[ "$?" == "0" ]];then
-    gcc asmfile.s -m32 -no-pie -o exec.out
+    gcc asmfile.s ../lib/printstr.s -m32 -no-pie -o exec.out
 else
     exit -1
 fi

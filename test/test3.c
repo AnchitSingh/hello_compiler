@@ -1,25 +1,28 @@
-/* C program for exponent series */ 
-/* taken from www.c4learn.com/c-programs/c-program-to-find-exponent-power-series.html */
-int main() {
-   int n, count;
-   float x, term, sum;
- 
-   printf("\nEnter value of x :");
-   scanf("%f", &x);
- 
-   n = term = sum = count = 1;
- 
-   while (n <= 100) {
-      term = term * x / n;
-      sum = sum + term;
-      count = count + 1;
- 
-      if (term < ACCURACY)
-         n = 999;
-      else
-         n = n + 1;
+void print(int i)
+{
+   printi(i);
+   printc(',');
+   printc(' ');
+}
+
+int main()
+{
+   int t1 = 0, t2 = 1, nextTerm = 0, n;
+   scani(n);
+
+   // displays the first two terms which is always 0 and 1
+   print(t1);
+   print(t2);
+   nextTerm = t1 + t2;
+
+   while (nextTerm <= n)
+   {
+      print(nextTerm);
+      t1 = t2;
+      t2 = nextTerm;
+      nextTerm = t1 + t2;
    }
- 
-   printf("\nTerms = %d Sum = %f", count, sum);
+   printnl();
+
    return 0;
 }
